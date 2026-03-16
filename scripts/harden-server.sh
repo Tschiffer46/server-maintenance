@@ -1,7 +1,7 @@
 #!/bin/bash
 # Server Hardening Script — Run ONCE manually with sudo
 # Usage: sudo bash harden-server.sh
-set -euo pipefail
+set -uo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "ERROR: This script must be run as root (sudo bash harden-server.sh)"
@@ -45,8 +45,10 @@ bantime = 7200
 JAILEOF
 systemctl enable fail2ban
 systemctl restart fail2ban
+echo "Waiting for fail2ban to start..."
+sleep 5
 echo "fail2ban status:"
-fail2ban-client status sshd
+fail2ban-client status sshd || echo "WARNING: fail2ban may still be starting. Check with: sudo fail2ban-client status sshd"
 
 # 3. SSH Hardening
 echo ""
