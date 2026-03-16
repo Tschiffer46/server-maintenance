@@ -68,7 +68,7 @@ grep -q "^MaxAuthTries 3" "$SSHD_CONFIG" || {
   sed -i 's/^#*MaxAuthTries.*/MaxAuthTries 3/' "$SSHD_CONFIG"
   echo "Set MaxAuthTries 3"
 }
-systemctl reload sshd
+systemctl reload ssh
 echo "SSH hardened"
 
 # 4. Unattended Security Upgrades
