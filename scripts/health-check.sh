@@ -13,7 +13,7 @@ SITES=(
   "https://hemsidor.agiletransition.se"
   "https://azprofil.agiletransition.se"
   "https://azp2b.agiletransition.se"
-  "https://agiletransition.agiletransition.se"
+  "https://agiletransition.se"
   "https://azstore.agiletransition.se"
   "https://stegvis.agiletransition.se"
   "https://voxtera.agiletransition.se"
