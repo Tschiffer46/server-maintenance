@@ -1,0 +1,37 @@
+name: Weekly Server Update
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Sunday 02:00 UTC (03:00 CET)
+  workflow_dispatch:       # Manual trigger
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload and run update script
+        run: |
+          scp -i ~/.ssh/key scripts/update-server.sh \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/update-server.sh
+          ssh -i ~/.ssh/key \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            'chmod +x /tmp/update-server.sh && bash /tmp/update-server.sh' \
+            2>&1 | tee update-output.txt
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-log-${{ github.run_number }}
+          path: update-output.txt
+          retention-days: 30

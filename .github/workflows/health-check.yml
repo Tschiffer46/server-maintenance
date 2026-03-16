@@ -1,0 +1,41 @@
+name: Health Check
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+  workflow_dispatch:         # Manual trigger
+
+jobs:
+  check-sites:
+    name: Check Sites (External)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check all sites
+        run: |
+          chmod +x scripts/health-check.sh
+          bash scripts/health-check.sh
+
+  check-server:
+    name: Check Server (Internal)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run server health check
+        run: |
+          scp -i ~/.ssh/key scripts/health-check-server.sh \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/health-check-server.sh
+          ssh -i ~/.ssh/key \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            'chmod +x /tmp/health-check-server.sh && bash /tmp/health-check-server.sh'

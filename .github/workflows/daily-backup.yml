@@ -1,0 +1,28 @@
+name: Daily Database Backup
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # 01:00 UTC daily (02:00 CET)
+  workflow_dispatch:       # Manual trigger
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload and run backup script
+        run: |
+          scp -i ~/.ssh/key scripts/backup-databases.sh \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/backup-databases.sh
+          ssh -i ~/.ssh/key \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            'chmod +x /tmp/backup-databases.sh && bash /tmp/backup-databases.sh'
