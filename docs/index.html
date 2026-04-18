@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Server Maintenance Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <strong>Server Dashboard</strong>
+      <span id="host" class="muted"></span>
+    </div>
+    <div class="topbar-right">
+      <span id="snapshot-ts" class="muted"></span>
+      <span id="overall-pill" class="pill pill-unknown">loading…</span>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="status">Status</button>
+    <button class="tab" data-tab="usage">Usage</button>
+    <button class="tab" data-tab="risks">Risks</button>
+  </nav>
+
+  <main>
+    <!-- STATUS -->
+    <section id="tab-status" class="tab-panel active">
+      <h2>Sites</h2>
+      <div id="sites-grid" class="grid"></div>
+
+      <h2>Containers</h2>
+      <div id="containers-grid" class="grid"></div>
+
+      <h2>System summary</h2>
+      <div id="system-summary" class="grid"></div>
+    </section>
+
+    <!-- USAGE -->
+    <section id="tab-usage" class="tab-panel">
+      <div class="range-bar">
+        <label>Range:</label>
+        <button class="range" data-hours="48">2 d</button>
+        <button class="range active" data-hours="168">7 d</button>
+        <button class="range" data-hours="720">30 d</button>
+        <button class="range" data-hours="0">all</button>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>CPU load</h3><canvas id="chart-load"></canvas></div>
+        <div class="chart-card"><h3>Memory used (MiB)</h3><canvas id="chart-mem"></canvas></div>
+        <div class="chart-card"><h3>Root disk used (%)</h3><canvas id="chart-disk"></canvas></div>
+        <div class="chart-card"><h3>Network rate (bytes/sec)</h3><canvas id="chart-net"></canvas></div>
+        <div class="chart-card"><h3>Containers running</h3><canvas id="chart-containers"></canvas></div>
+        <div class="chart-card"><h3>Sites OK</h3><canvas id="chart-sites"></canvas></div>
+        <div class="chart-card"><h3>Database total (bytes)</h3><canvas id="chart-db"></canvas></div>
+        <div class="chart-card"><h3>Backup directory total (bytes)</h3><canvas id="chart-backup"></canvas></div>
+      </div>
+    </section>
+
+    <!-- RISKS -->
+    <section id="tab-risks" class="tab-panel">
+      <div id="risks-summary" class="risk-summary"></div>
+      <div id="risks-list"></div>
+
+      <h2>SSL certificates</h2>
+      <table id="cert-table" class="data-table"></table>
+
+      <h2>Container images on disk</h2>
+      <table id="images-table" class="data-table"></table>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span class="muted">Data: <code>docs/data/latest.json</code> + <code>docs/data/history.jsonl</code> · refreshed every 6 h via GitHub Actions</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+name: Collect Dashboard Metrics
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: metrics-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq openssl
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Collect server metrics
+        run: |
+          scp -i ~/.ssh/key scripts/collect-metrics.sh \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/collect-metrics.sh
+          ssh -i ~/.ssh/key \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            'chmod +x /tmp/collect-metrics.sh && bash /tmp/collect-metrics.sh' \
+            > /tmp/server.json
+          jq . /tmp/server.json > /dev/null  # validate
+
+      - name: Probe public sites
+        run: |
+          chmod +x scripts/check-sites-json.sh
+          bash scripts/check-sites-json.sh > /tmp/sites.json
+          jq . /tmp/sites.json > /dev/null
+
+      - name: Merge into latest snapshot
+        run: |
+          mkdir -p docs/data
+          jq -s '{
+            ts: .[0].ts,
+            collected_at: now | todate,
+            server: .[0],
+            sites: .[1].sites
+          }' /tmp/server.json /tmp/sites.json > docs/data/latest.json
+
+      - name: Append compact record to history
+        run: |
+          touch docs/data/history.jsonl
+          jq -c '{
+            ts: .ts,
+            load1: .server.cpu.load1,
+            load5: .server.cpu.load5,
+            mem_used_mib: .server.memory.used_mib,
+            mem_total_mib: .server.memory.total_mib,
+            swap_used_mib: .server.memory.swap_used_mib,
+            disk_used_pct: ([.server.disks[] | select(.mount=="/")][0].use_pct // 0),
+            disk_used_bytes: ([.server.disks[] | select(.mount=="/")][0].used // 0),
+            net_rx_bytes: ([.server.network[].rx_bytes] | add // 0),
+            net_tx_bytes: ([.server.network[].tx_bytes] | add // 0),
+            containers_running: ([.server.containers[] | select(.state=="running")] | length),
+            containers_total: (.server.containers | length),
+            sites_ok: ([.sites[] | select(.ok)] | length),
+            sites_total: (.sites | length),
+            backup_age_hours: .server.backups.latest_age_hours,
+            backup_total_bytes: .server.backups.total_bytes,
+            apt_pending: .server.os_updates.pending,
+            apt_security: .server.os_updates.security,
+            reboot_required: .server.os_updates.reboot_required,
+            f2b_bans: .server.security.fail2ban_currently_banned,
+            ssh_failed_24h: .server.security.ssh_failed_logins_24h,
+            min_cert_days: ([.sites[].cert_days_left | numbers] | min // null),
+            db_total_bytes: ([.server.databases[].size] | add // 0)
+          }' docs/data/latest.json >> docs/data/history.jsonl
+
+          # Cap history at the last 1500 records (~12 months at 6h cadence)
+          tail -n 1500 docs/data/history.jsonl > docs/data/history.jsonl.tmp
+          mv docs/data/history.jsonl.tmp docs/data/history.jsonl
+
+      - name: Commit changes
+        run: |
+          git config user.name  "metrics-bot"
+          git config user.email "metrics-bot@users.noreply.github.com"
+          git add docs/data/latest.json docs/data/history.jsonl
+          if git diff --cached --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git commit -m "metrics: snapshot $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3 4; do
+            if git push origin HEAD:${{ github.ref_name }}; then exit 0; fi
+            sleep $((2 ** i))
+          done
+          exit 1
