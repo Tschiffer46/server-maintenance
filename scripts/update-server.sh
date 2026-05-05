@@ -20,7 +20,7 @@ done
 # 3. Recreate static site containers (picks up new nginx:alpine)
 log "=== Restarting static site containers ==="
 cd /home/deploy/hosting
-for svc in azprofil azp2b agiletransition hemsidor azstore schiffer seatower; do
+for svc in azprofil azp2b agiletransition hemsidor ehandel azstore schiffer seatower; do
   docker compose up -d --force-recreate "$svc" >> "$LOG" 2>&1 || { log "ERROR: Failed to restart $svc"; ERRORS=$((ERRORS+1)); }
 done
 
@@ -39,7 +39,7 @@ sleep 10
 # 7. Quick health check after update
 log "=== Post-update health check ==="
 CONTAINERS=$(docker ps --format '{{.Names}}' | sort)
-EXPECTED="agiletransition azp2b azprofil azstore forfor forfor-db hemsidor proxy-manager schiffer seatower stegvis voxtera voxtera-db"
+EXPECTED="agiletransition azp2b azprofil azstore ehandel forfor forfor-db hemsidor proxy-manager schiffer seatower stegvis voxtera voxtera-db"
 for name in $EXPECTED; do
   if echo "$CONTAINERS" | grep -q "^${name}$"; then
     log "OK: $name is running"
