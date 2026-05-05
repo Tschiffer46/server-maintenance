@@ -7,6 +7,7 @@ SITES=(
   "https://schiffer.agiletransition.se"
   "https://seatower.agiletransition.se"
   "https://hemsidor.agiletransition.se"
+  "https://ehandel.agiletransition.se"
   "https://azprofil.agiletransition.se"
   "https://azp2b.agiletransition.se"
   "https://agiletransition.se"

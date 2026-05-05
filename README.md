@@ -84,6 +84,7 @@ These must be configured in this repo's settings:
 | azp2b | Static | azp2b.agiletransition.se |
 | agiletransition | Static | agiletransition.agiletransition.se |
 | hemsidor | Static | hemsidor.agiletransition.se |
+| ehandel | Static | ehandel.agiletransition.se |
 | azstore | Static | azstore.agiletransition.se |
 | schiffer | Static | schiffer.agiletransition.se |
 | seatower | Static | seatower.agiletransition.se |
