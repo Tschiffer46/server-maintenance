@@ -232,6 +232,68 @@ openclaw/config/infra.conf` to undo and run the check again to clear the state.
 
 ---
 
+## Iteration 5 — Email triage (IMAP → Claude → Telegram)
+
+Watches 3 Mailcow inboxes **read-only** (cannot modify, move, delete, or mark
+read), classifies each new message with Claude as IMPORTANT / NORMAL / JUNK,
+and pings Telegram only for IMPORTANT ones. Runs every 5 minutes.
+
+Inboxes (edit `openclaw/config/email.conf` to change):
+- `thomas@schiffer.se`
+- `thomas@agiletransition.se`
+- `info@agiletransition.se`
+
+**Data minimisation:** only sender, subject, and the first 500 characters of
+the plain-text body are sent to Claude. Full bodies are never written to disk.
+
+### Step 5.1 — Create Mailcow app-passwords (one per inbox)
+
+App-passwords are separate, revocable passwords just for IMAP — your main
+password isn't shared with this script.
+
+1. Sign in to Mailcow at https://mail.schiffer.se as each mailbox owner
+2. **Account → App passwords → Create new**
+3. Name it `openclaw-monitor`, **enable IMAP**, leave SMTP off
+4. Copy the generated password (it's only shown once)
+
+You'll need three of these — one for each inbox.
+
+### Step 5.2 — Install
+
+SSH in as `deploy`, then:
+
+```bash
+cd ~/server-maintenance
+git pull
+bash openclaw/scripts/05-install-email-triage.sh
+```
+
+The script asks for the three app-passwords (one at a time, hidden input),
+then tests each connection in read-only mode. The first cron run is silent
+— it just records the current "top UID" per inbox so you don't get blasted
+with historical mail.
+
+### Step 5.3 — Verify
+
+```bash
+crontab -l | grep email-triage          # should show the */5 line
+tail -f ~/.openclaw-monitor/monitor.log # watch classifications
+ls ~/.openclaw-monitor/state/email-*    # one per inbox
+```
+
+Send yourself a test mail with subject `URGENT: test from Thomas` — within 5
+minutes it should classify as IMPORTANT and arrive in Telegram.
+
+### Notes
+
+- **Cost:** Haiku 4.5 ≈ €0.001 per classified message. 100 mails/day ≈ €3/mo.
+- **Change the model** in `openclaw/config/email.conf` (`CLASSIFIER_MODEL=`).
+- **Pause triage:** `crontab -e` and comment out the `email-triage.py` line.
+- **Add more inboxes:** edit `email.conf` `INBOXES=` and add a corresponding
+  `IMAP_PASS_*` entry to `~/.openclaw-monitor/.env`.
+
+---
+
 ## If something goes wrong
 
 - **Don't run any cleanup or `rm` commands.** Stop and message me with:
