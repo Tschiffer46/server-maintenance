@@ -126,6 +126,64 @@ Report back: "step 7 works" and I'll start iteration 2 (site monitoring cron job
 
 ---
 
+## Iteration 2 — Site monitoring (HTTP + SSL)
+
+Adds cron jobs that check 5 sites every 5 minutes (HTTP) and every 6 hours
+(SSL cert expiry), pinging your Telegram bot **only when status changes**.
+
+Sites monitored (edit `openclaw/config/sites.txt` to change):
+agiletransition.se · schiffer.se · digitaltoberoende.se · digitalsovereignty.eu · euproof.eu
+
+### Step 2.1 — Find your Telegram chat id
+
+When you ran `/start` on your bot earlier, it replied with:
+
+> Your Telegram user id: **XXXXXXXXX**
+
+Copy that number — it's also your **chat id**. (If you've lost it, send `/start`
+to the bot again.)
+
+### Step 2.2 — Run the installer
+
+SSH in as `deploy`, then:
+
+```bash
+cd ~/server-maintenance
+git pull
+bash openclaw/scripts/03-install-monitoring.sh
+```
+
+The script will:
+
+1. Read your bot token from OpenClaw's config (no need to paste it).
+2. Ask for your **Telegram chat id** — paste the number from step 2.1.
+3. Send a test message to Telegram (you should see "🦞 OpenClaw monitor installed…").
+4. Install two cron jobs:
+   - `*/5 * * * *` site-check.sh — HTTP status every 5 minutes
+   - `17 */6 * * *` ssl-check.sh — SSL expiry every 6 hours
+5. Run the first HTTP check immediately to seed state.
+
+### Step 2.3 — Verify
+
+```bash
+crontab -l                              # should show the openclaw-monitor block
+tail -f ~/.openclaw-monitor/monitor.log # live log
+ls ~/.openclaw-monitor/state/           # one file per site
+```
+
+To test a real alert, temporarily add a bogus URL to `openclaw/config/sites.txt`
+(e.g. `https://this-does-not-exist.example`), wait 5 minutes — you should get a
+🚨 DOWN message. Then remove the line and wait 5 more minutes for ✅ RECOVERED…
+or just delete its state file.
+
+### Step 2.4 — To stop monitoring
+
+```bash
+crontab -e   # delete the lines between # >>> openclaw-monitor >>> markers
+```
+
+---
+
 ## If something goes wrong
 
 - **Don't run any cleanup or `rm` commands.** Stop and message me with:

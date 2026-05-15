@@ -1,0 +1,9 @@
+# Sites to monitor. One URL per line. Lines starting with # are ignored.
+# HTTP check: every 5 min, alerts on status change (up->down or down->up).
+# SSL check: every 6 hr, alerts when cert expires in <14 days (once per day).
+
+https://agiletransition.se
+https://schiffer.se
+https://digitaltoberoende.se
+https://digitalsovereignty.eu
+https://euproof.eu
