@@ -35,8 +35,11 @@ check_one() {
   local code
   code="$(curl -L -o /dev/null -s -w '%{http_code}' --max-time 20 --retry 1 --retry-delay 2 "$url" 2>/dev/null || echo '000')"
 
+  # Treat any response from the server (1xx-4xx) as "up" — only 5xx or
+  # connection failure (000) counts as down. 401/403 means the site is
+  # alive but auth-protected, which is normal for staging/internal hosts.
   local now
-  if [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; then
+  if [ "$code" -ge 100 ] && [ "$code" -lt 500 ]; then
     now="up:$code"
   else
     now="down:$code"
