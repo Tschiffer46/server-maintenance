@@ -184,6 +184,54 @@ crontab -e   # delete the lines between # >>> openclaw-monitor >>> markers
 
 ---
 
+## Iteration 3 — Infrastructure checks (disk / RAM / Docker / services)
+
+Adds a 15-minute cron job that watches the *server itself*:
+
+- **Disk** at `/` — warn at 85%, critical at 95%
+- **Memory** — warn at 90% used
+- **Swap** — warn at 50% used (skipped on swap-less hosts)
+- **Load average** — warn when 1-min load > 4× CPU count
+- **Docker containers** — warn if any of `azprofil-shopware`, `azprofil-redis`, `npm` is not `running`
+- **Systemd services** — warn if any of `fail2ban`, `ufw`, `docker`, `ssh` is not active
+
+Same transition-based alerts: you only hear about it when state changes.
+Edit `openclaw/config/infra.conf` to tweak thresholds or the expected container list.
+
+### Step 3.1 — Install
+
+```bash
+cd ~/server-maintenance
+git pull
+bash openclaw/scripts/04-install-infra-monitoring.sh
+```
+
+The installer runs one check immediately (no notifications unless something is
+actually wrong) and appends `*/15 * * * * infra-check.sh` to your cron block.
+
+### Step 3.2 — Verify
+
+```bash
+crontab -l | grep openclaw -A 5     # should now show 3 cron lines
+ls ~/.openclaw-monitor/state/       # one infra-*.state file per metric
+tail ~/.openclaw-monitor/monitor.log
+```
+
+### Step 3.3 — Test an alert (optional)
+
+Trigger a fake container outage:
+
+```bash
+echo 'EXPECTED_CONTAINERS="azprofil-shopware azprofil-redis npm does-not-exist"' \
+  >> openclaw/config/infra.conf
+bash openclaw/scripts/infra-check.sh
+```
+
+You should get a 🚨 ALERT in Telegram about `does-not-exist`. Then `git checkout
+openclaw/config/infra.conf` to undo and run the check again to clear the state.
+
+---
+
 ## If something goes wrong
 
 - **Don't run any cleanup or `rm` commands.** Stop and message me with:
