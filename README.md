@@ -7,7 +7,7 @@ Automated maintenance for the Hetzner VPS (89.167.90.112) hosting all agiletrans
 | Workflow | Schedule | What it does |
 |----------|----------|-------------|
 | **Daily Backup** | 02:00 CET daily | pg_dump ForFor + Voxtera databases, 14-day rotation |
-| **Health Check** | Every 6 hours | HTTP checks all 10 sites + server disk/memory/containers |
+| **Health Check** | Manual only | HTTP checks all 10 sites + server disk/memory/containers |
 | **Weekly Update** | Sunday 03:00 CET | OS updates, Docker image pulls, container restarts |
 | **Collect Dashboard Metrics** | Every 6 hours | Snapshots usage/risk/status JSON into `docs/data/` for the dashboard |
 
