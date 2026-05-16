@@ -11,6 +11,7 @@ SITES_FILE="${SITES_FILE:-$REPO_DIR/openclaw/config/sites.txt}"
 STATE_DIR="${STATE_DIR:-$HOME/.openclaw-monitor/state}"
 LOG_FILE="${LOG_FILE:-$HOME/.openclaw-monitor/monitor.log}"
 NOTIFY="$SCRIPT_DIR/lib/notify-telegram.sh"
+LOG_EVENT="$SCRIPT_DIR/lib/log-event.py"
 WARN_DAYS="${WARN_DAYS:-14}"
 
 mkdir -p "$STATE_DIR" "$(dirname "$LOG_FILE")"
@@ -58,6 +59,7 @@ check_one() {
     if [ "$last" != "$today" ]; then
       "$NOTIFY" "⚠️ <b>SSL EXPIRING</b>: $host in $days_left days ($end_date)" \
         && printf '%s' "$today" > "$state_file"
+      python3 "$LOG_EVENT" ssl warn "$host" "expires in $days_left days ($end_date)" 2>/dev/null || true
     fi
   fi
 }

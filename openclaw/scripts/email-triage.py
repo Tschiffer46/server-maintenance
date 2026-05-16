@@ -27,6 +27,7 @@ import imaplib
 import json
 import os
 import re
+import sqlite3
 import ssl
 import sys
 import urllib.error
@@ -43,9 +44,33 @@ ENV_FILE = Path(os.environ.get("OPENCLAW_MONITOR_ENV", Path.home() / ".openclaw-
 STATE_DIR = Path(os.environ.get("STATE_DIR", Path.home() / ".openclaw-monitor" / "state"))
 LOG_FILE = Path(os.environ.get("LOG_FILE", Path.home() / ".openclaw-monitor" / "monitor.log"))
 NOTIFY = HERE / "lib" / "notify-telegram.sh"
+EVENTS_DB = Path(os.environ.get("EVENTS_DB", Path.home() / ".openclaw-monitor" / "events.db"))
 
 # Body excerpt size sent to Claude — keep small to minimise data exposure.
 BODY_CHARS = 500
+
+
+def log_event(severity: str, source: str, message: str) -> None:
+    """Append to SQLite events DB. Failures are non-fatal."""
+    try:
+        EVENTS_DB.parent.mkdir(parents=True, exist_ok=True)
+        ts = __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with sqlite3.connect(str(EVENTS_DB)) as conn:
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts TEXT NOT NULL, kind TEXT NOT NULL, severity TEXT NOT NULL,
+                    source TEXT NOT NULL, message TEXT NOT NULL)"""
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_ts ON events (ts)")
+            conn.execute(
+                "INSERT INTO events (ts, kind, severity, source, message) VALUES (?, ?, ?, ?, ?)",
+                (ts, "email", severity, source, message),
+            )
+    except Exception:
+        pass  # never block triage on logging failures
 
 
 def log(msg: str) -> None:
@@ -320,6 +345,7 @@ def process_inbox(
                 category, reason = "NORMAL", "(classifier error)"
 
             log(f"{slug}: UID {uid} -> {category} | {subject[:80]}")
+            log_event(category.lower(), slug, f"{sender} | {subject[:120]}")
 
             if category == "IMPORTANT":
                 text = (

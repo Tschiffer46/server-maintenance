@@ -11,6 +11,7 @@ CONF_FILE="${INFRA_CONF:-$REPO_DIR/openclaw/config/infra.conf}"
 STATE_DIR="${STATE_DIR:-$HOME/.openclaw-monitor/state}"
 LOG_FILE="${LOG_FILE:-$HOME/.openclaw-monitor/monitor.log}"
 NOTIFY="$SCRIPT_DIR/lib/notify-telegram.sh"
+LOG_EVENT="$SCRIPT_DIR/lib/log-event.py"
 
 mkdir -p "$STATE_DIR" "$(dirname "$LOG_FILE")"
 
@@ -44,10 +45,12 @@ transition() {
       ok)
         if [ "$prev" != "ok" ] && [ "$prev" != "unknown" ]; then
           "$NOTIFY" "✅ <b>OK</b>: $msg" || log "notify failed: $key"
+          python3 "$LOG_EVENT" infra recovered "$key" "$msg" 2>/dev/null || true
         fi
         ;;
       *)
         "$NOTIFY" "🚨 <b>ALERT</b> ($key): $msg" || log "notify failed: $key"
+        python3 "$LOG_EVENT" infra "$now" "$key" "$msg" 2>/dev/null || true
         ;;
     esac
   fi

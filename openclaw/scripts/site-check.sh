@@ -11,6 +11,7 @@ SITES_FILE="${SITES_FILE:-$REPO_DIR/openclaw/config/sites.txt}"
 STATE_DIR="${STATE_DIR:-$HOME/.openclaw-monitor/state}"
 LOG_FILE="${LOG_FILE:-$HOME/.openclaw-monitor/monitor.log}"
 NOTIFY="$SCRIPT_DIR/lib/notify-telegram.sh"
+LOG_EVENT="$SCRIPT_DIR/lib/log-event.py"
 
 mkdir -p "$STATE_DIR" "$(dirname "$LOG_FILE")"
 
@@ -54,11 +55,13 @@ check_one() {
         if [ "$prev" != "unknown" ]; then
           "$NOTIFY" "✅ <b>RECOVERED</b>: $url is back (HTTP $code)" \
             || log "notify failed for $url"
+          python3 "$LOG_EVENT" site recovered "$url" "HTTP $code" 2>/dev/null || true
         fi
         ;;
       down:*)
         "$NOTIFY" "🚨 <b>DOWN</b>: $url returned HTTP $code" \
           || log "notify failed for $url"
+        python3 "$LOG_EVENT" site down "$url" "HTTP $code" 2>/dev/null || true
         ;;
     esac
   fi

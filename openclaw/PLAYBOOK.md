@@ -324,6 +324,51 @@ To add e.g. `thomas@schiffer.se`:
 
 ---
 
+## Iteration 6 — Morning digest (08:00) + event history
+
+Every alert and email classification gets recorded in a SQLite database
+(`~/.openclaw-monitor/events.db`). A daily cron at **08:00 server time** posts
+a single summary to Telegram covering the last 24 hours: site outages, SSL
+warnings, server health events, important emails.
+
+### Step 6.1 — Install
+
+```bash
+cd ~/server-maintenance
+git pull
+bash openclaw/scripts/06-install-digest.sh
+```
+
+The script:
+1. Creates the events DB (and indexes).
+2. Adds `0 8 * * *` to your cron block.
+3. Offers to send a test digest right now (answer `y` to try it — body will
+   reflect whatever's in the DB so far, probably empty on first install).
+
+### Step 6.2 — Verify
+
+```bash
+crontab -l | grep morning-digest             # one line at 08:00
+sqlite3 ~/.openclaw-monitor/events.db \
+  'SELECT ts, kind, severity, source FROM events ORDER BY id DESC LIMIT 10;'
+python3 openclaw/scripts/morning-digest.py   # send a digest on demand
+```
+
+### Notes
+
+- All existing checks (site / ssl / infra / email) now write to the events DB
+  alongside their Telegram alerts. The DB is the source of truth; the digest
+  just queries it.
+- Want a different time? Edit the `0 8 * * *` line in `crontab -e`.
+- Want a different window? Set `DIGEST_WINDOW_HOURS=48` in the cron line.
+- DB grows ~1 KB per event. To trim old data:
+  ```bash
+  sqlite3 ~/.openclaw-monitor/events.db \
+    "DELETE FROM events WHERE ts < datetime('now','-90 days'); VACUUM;"
+  ```
+
+---
+
 ## If something goes wrong
 
 - **Don't run any cleanup or `rm` commands.** Stop and message me with:
