@@ -51,7 +51,7 @@ BODY_CHARS = 500
 def log(msg: str) -> None:
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     import datetime
-    ts = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     with LOG_FILE.open("a") as f:
         f.write(f"{ts} email-triage: {msg}\n")
 
