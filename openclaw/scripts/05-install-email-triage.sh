@@ -38,8 +38,9 @@ prompt_secret() {
   if [ -n "$cur" ]; then
     echo "  ${var} already set (leave blank to keep)."
   fi
-  # -s = silent; prompt to stderr so it isn't captured if someone pipes stdout.
-  read -r -s -p "  ${label}: " entered
+  # Read from /dev/tty so this works inside a while-loop that's piped from
+  # a process substitution (otherwise read steals from the loop's stdin).
+  read -r -s -p "  ${label}: " entered </dev/tty
   echo
   if [ -z "$entered" ]; then
     if [ -n "$cur" ]; then return 0; fi
