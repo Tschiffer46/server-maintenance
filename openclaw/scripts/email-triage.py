@@ -247,10 +247,14 @@ def process_inbox(
         except Exception: pass
         return
     try:
-        # EXAMINE = read-only; the server will refuse STORE/EXPUNGE in this mode.
-        typ, _ = imap.examine(mailbox)
+        # readonly=True sends EXAMINE — server refuses STORE/EXPUNGE in this mode.
+        # We use select(readonly=True) instead of examine() because the latter
+        # raises "Unknown IMAP4 command: 'examine'" on some Python builds even
+        # though it's a documented method; select is part of the same code path
+        # and reliably present.
+        typ, _ = imap.select(mailbox, readonly=True)
         if typ != "OK":
-            log(f"{slug}: examine {mailbox} failed")
+            log(f"{slug}: select (read-only) {mailbox} failed")
             return
 
         # Fetch the UID range we haven't seen yet.

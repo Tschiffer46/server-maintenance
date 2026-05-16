@@ -129,9 +129,15 @@ for line in inbox_block.splitlines():
     try:
         imap = imaplib.IMAP4_SSL(host, port, ssl_context=ssl.create_default_context())
         imap.login(user, pw)
-        imap.examine("INBOX")
+        # select(readonly=True) sends EXAMINE under the hood; avoids the
+        # examine() method (which behaves oddly in some Python builds).
+        typ, _ = imap.select("INBOX", readonly=True)
         imap.logout()
-        print(f"  ✓ {slug:25s} OK")
+        if typ != "OK":
+            failed += 1
+            print(f"  ✗ {slug:25s} FAILED: server returned {typ} for SELECT INBOX")
+        else:
+            print(f"  ✓ {slug:25s} OK")
     except Exception as e:
         failed += 1
         print(f"  ✗ {slug:25s} FAILED: {e}")
