@@ -73,16 +73,28 @@ fi
 
 echo
 echo "▶ IMAP app-passwords for Mailcow"
-echo "  Generate one per inbox at: https://mail.schiffer.se → Account → App passwords"
-echo "  (App passwords are separate from your main password and can be revoked.)"
-echo "  Enter is empty to keep an existing value."
+echo "  Generate one per inbox in Mailcow → Applikationslösenord (IMAP-only)."
+echo "  We'll prompt only for inboxes whose password isn't already in .env."
+echo "  Press Enter to keep an existing value."
 echo
-echo "  thomas@schiffer.se"
-prompt_secret IMAP_PASS_THOMAS_SCHIFFER "  app-password"
-echo "  thomas@agiletransition.se"
-prompt_secret IMAP_PASS_THOMAS_AGILE    "  app-password"
-echo "  info@agiletransition.se"
-prompt_secret IMAP_PASS_INFO_AGILE      "  app-password"
+
+# Parse INBOXES from the conf file: slug | user | env_var
+# (Tolerant of extra whitespace around |.)
+while IFS= read -r line; do
+  line="${line#"${line%%[![:space:]]*}"}"
+  line="${line%"${line##*[![:space:]]}"}"
+  [ -z "$line" ] && continue
+  case "$line" in \#*) continue;; esac
+  slug="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')"
+  user="$(printf '%s' "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')"
+  var="$(printf '%s'  "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')"
+  [ -z "$slug" ] && continue
+  echo "  $user  [$slug]"
+  prompt_secret "$var" "  app-password"
+done < <(awk '
+  /INBOXES[[:space:]]*=[[:space:]]*"/ {inside=1; sub(/^[^"]*"/, ""); }
+  inside { if (match($0,/"/)) {print substr($0,1,RSTART-1); exit} else print }
+' "$CONF_FILE")
 
 # Test connections (read-only) without classifying anything.
 echo

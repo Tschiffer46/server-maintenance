@@ -239,9 +239,10 @@ read), classifies each new message with Claude as IMPORTANT / NORMAL / JUNK,
 and pings Telegram only for IMPORTANT ones. Runs every 5 minutes.
 
 Inboxes (edit `openclaw/config/email.conf` to change):
-- `thomas@schiffer.se`
+- `tschiffer@agiletransition.se`
 - `thomas@agiletransition.se`
-- `info@agiletransition.se`
+- `thomas@euproof.eu`
+- `getengaged@euproof.eu`
 
 **Data minimisation:** only sender, subject, and the first 500 characters of
 the plain-text body are sent to Claude. Full bodies are never written to disk.
@@ -252,11 +253,12 @@ App-passwords are separate, revocable passwords just for IMAP — your main
 password isn't shared with this script.
 
 1. Sign in to Mailcow at https://mail.schiffer.se as each mailbox owner
-2. **Account → App passwords → Create new**
-3. Name it `openclaw-monitor`, **enable IMAP**, leave SMTP off
-4. Copy the generated password (it's only shown once)
+2. Go to the **Applikationslösenord** tab (top, next to Spamfilter)
+3. **Skapa nytt applikationslösenord**
+4. Name it `openclaw-monitor`, **tick IMAP only** (untick SMTP/POP3/Sieve/etc.)
+5. Copy the generated password (it's only shown once)
 
-You'll need three of these — one for each inbox.
+You'll need one per inbox listed above.
 
 ### Step 5.2 — Install
 
@@ -289,8 +291,36 @@ minutes it should classify as IMPORTANT and arrive in Telegram.
 - **Cost:** Haiku 4.5 ≈ €0.001 per classified message. 100 mails/day ≈ €3/mo.
 - **Change the model** in `openclaw/config/email.conf` (`CLASSIFIER_MODEL=`).
 - **Pause triage:** `crontab -e` and comment out the `email-triage.py` line.
-- **Add more inboxes:** edit `email.conf` `INBOXES=` and add a corresponding
-  `IMAP_PASS_*` entry to `~/.openclaw-monitor/.env`.
+
+### Adding more inboxes later
+
+To add e.g. `thomas@schiffer.se`:
+
+1. Create a Mailcow app-password for that inbox (Step 5.1).
+2. Edit `openclaw/config/email.conf` and add a line to `INBOXES="..."`:
+   ```
+   thomas-schiffer | thomas@schiffer.se | IMAP_PASS_THOMAS_SCHIFFER
+   ```
+   - **slug** (`thomas-schiffer`): short, `[a-z0-9-]`, used in state files and alerts.
+   - **env var** (`IMAP_PASS_THOMAS_SCHIFFER`): any name starting with `IMAP_PASS_`.
+3. Commit and push the change (so the config is tracked):
+   ```bash
+   git add openclaw/config/email.conf && git commit -m "email: add thomas@schiffer.se" && git push
+   ```
+4. On the server:
+   ```bash
+   cd ~/server-maintenance && git pull
+   bash openclaw/scripts/05-install-email-triage.sh
+   ```
+   The installer skips inboxes whose password is already in `.env` and
+   prompts only for the new one.
+
+### Removing an inbox
+
+1. Remove the line from `INBOXES="..."` in `openclaw/config/email.conf`.
+2. (Optional) Delete the password line from `~/.openclaw-monitor/.env` and the
+   state file `rm ~/.openclaw-monitor/state/email-<slug>.uid`.
+3. Revoke the corresponding Mailcow app-password.
 
 ---
 
