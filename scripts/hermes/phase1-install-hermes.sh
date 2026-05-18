@@ -14,7 +14,7 @@ INSTALLER_URL="https://raw.githubusercontent.com/NousResearch/hermes-agent/main/
 INSTALLER_PATH="/tmp/hermes-install.sh"
 HERMES_USER="hermes"
 HERMES_HOME="/home/${HERMES_USER}"
-UNIT_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.. && pwd)/systemd/hermes.service"
+UNIT_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/systemd/hermes.service"
 UNIT_DST="/etc/systemd/system/hermes.service"
 
 # OpenClaw service name on this host. We check both common names.
