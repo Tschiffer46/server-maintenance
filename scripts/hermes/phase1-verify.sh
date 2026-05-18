@@ -10,6 +10,7 @@ set -uo pipefail
 HERMES_USER="hermes"
 HERMES_HOME="/home/${HERMES_USER}"
 HERMES_BIN="${HERMES_HOME}/.local/bin/hermes"
+OPENCLAW_UNITS=(openclaw-gateway openclaw)
 
 pass=0; fail=0
 ok()  { printf '  [ok]   %s\n' "$*"; pass=$((pass+1)); }
@@ -40,15 +41,19 @@ fi
 
 echo
 echo "== openclaw still healthy =="
-if systemctl is-active --quiet openclaw; then
-  ok "openclaw is active"
+active_unit=""
+for u in "${OPENCLAW_UNITS[@]}"; do
+  if systemctl is-active --quiet "$u"; then active_unit="$u"; break; fi
+done
+if [ -n "$active_unit" ]; then
+  ok "openclaw service active: $active_unit"
 else
-  bad "openclaw is NOT active - phase 1 should not have touched it"
+  bad "no openclaw service active (checked: ${OPENCLAW_UNITS[*]})"
 fi
-if ss -ltn 2>/dev/null | grep -q '127.0.0.1:18789'; then
-  ok "openclaw listening on 127.0.0.1:18789"
+if ss -ltn 2>/dev/null | grep -q ':18789'; then
+  ok "openclaw listening on port 18789"
 else
-  bad "nothing listening on 127.0.0.1:18789 - openclaw may be unhealthy"
+  bad "nothing listening on 18789 - openclaw may be unhealthy"
 fi
 
 echo

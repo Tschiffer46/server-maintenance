@@ -17,6 +17,9 @@ HERMES_HOME="/home/${HERMES_USER}"
 UNIT_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.. && pwd)/systemd/hermes.service"
 UNIT_DST="/etc/systemd/system/hermes.service"
 
+# OpenClaw service name on this host. We check both common names.
+OPENCLAW_UNITS=(openclaw-gateway openclaw)
+
 log() { printf '[phase1] %s\n' "$*"; }
 fail() { printf '[phase1] ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -24,10 +27,17 @@ fail() { printf '[phase1] ERROR: %s\n' "$*" >&2; exit 1; }
 [ -f "$UNIT_SRC" ] || fail "could not find $UNIT_SRC - run from a clone of the repo"
 
 # 1. Verify OpenClaw is still up before we touch anything.
-if systemctl is-active --quiet openclaw; then
-  log "openclaw is active - good, we will not touch it"
-else
-  log "WARNING: openclaw is not active. Phase 0 assumed it was running."
+openclaw_active=0
+for u in "${OPENCLAW_UNITS[@]}"; do
+  if systemctl is-active --quiet "$u"; then
+    log "$u is active - good, we will not touch it"
+    openclaw_active=1
+    break
+  fi
+done
+if [ "$openclaw_active" -eq 0 ]; then
+  log "WARNING: no OpenClaw service is active (looked for: ${OPENCLAW_UNITS[*]})."
+  log "  if it runs another way (manual/pm2/screen), that's fine - just confirm."
   read -r -p "continue anyway? [y/N] " ans
   [ "$ans" = "y" ] || exit 1
 fi
@@ -40,8 +50,7 @@ else
   useradd --system --create-home --shell /bin/bash --home-dir "$HERMES_HOME" "$HERMES_USER"
 fi
 
-# 3. Download the installer to a file, show its checksum, ask for consent
-#    before executing. This is the bit users should never blindly accept.
+# 3. Download the installer, show its checksum, ask for consent before exec.
 log "downloading installer to $INSTALLER_PATH"
 curl -fsSL "$INSTALLER_URL" -o "$INSTALLER_PATH"
 chmod 0755 "$INSTALLER_PATH"
