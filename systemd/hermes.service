@@ -1,0 +1,39 @@
+[Unit]
+Description=Hermes Agent (Nous Research)
+Documentation=https://github.com/NousResearch/hermes-agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+WorkingDirectory=/home/hermes
+Environment=HOME=/home/hermes
+Environment=PATH=/home/hermes/.local/bin:/usr/local/bin:/usr/bin:/bin
+# `hermes gateway` is the long-running messaging gateway process.
+# If a future version requires a subcommand (e.g. `gateway start`),
+# update here and reload the unit.
+ExecStart=/home/hermes/.local/bin/hermes gateway
+Restart=always
+RestartSec=10
+
+# Resource caps so Hermes cannot starve other services on this host.
+MemoryMax=1G
+CPUQuota=30%
+TasksMax=512
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/hermes/.hermes /home/hermes/.local
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
