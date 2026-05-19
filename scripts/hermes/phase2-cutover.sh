@@ -121,11 +121,12 @@ sudo -u "$HERMES_USER" -H "$HERMES_BIN" claw migrate \
 rc=${PIPESTATUS[0]}
 set -e
 
-# hermes claw migrate sometimes exits 0 even when it refuses to apply.
-# Treat "Refusing to apply" / "No files were modified" as failure.
-if [ "$rc" -ne 0 ] || grep -qE 'Refusing to apply|No files were modified' "$MIG_LOG"; then
+# Success signal from the tool: "Migration complete!" near end of output.
+# Failure: explicit "Refusing to apply". (The phrase "No files were modified"
+# also appears in the in-output preview even on success - don't match it.)
+if [ "$rc" -ne 0 ] || grep -q 'Refusing to apply' "$MIG_LOG" || ! grep -q 'Migration complete' "$MIG_LOG"; then
   log ""
-  log "migration did not complete cleanly (exit=$rc, or refusal detected)."
+  log "migration did not complete cleanly (exit=$rc)."
   log "  log: $MIG_LOG"
   log "  options:"
   log "    - inspect the log, retry the migrate command manually"
