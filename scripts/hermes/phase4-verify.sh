@@ -17,9 +17,9 @@ echo ""
 [ -f /etc/hermes-monitoring/infra.conf ] && source /etc/hermes-monitoring/infra.conf
 MAILCOW_HOST="${MAILCOW_HOST:-204.168.157.75}"
 MAILCOW_SSH_KEY="${MAILCOW_SSH_KEY:-/home/hermes/.ssh/id_ed25519_mailcow}"
-MAILCOW_SSH_USER="${MAILCOW_SSH_USER:-deploy}"
+MAILCOW_SSH_USER="${MAILCOW_SSH_USER:-root}"
 WEBHOSTING_HOST="${WEBHOSTING_HOST:-89.167.90.112}"
-WEBHOSTING_SSH_KEY="${WEBHOSTING_SSH_KEY:-/home/hermes/.ssh/id_ed25519_webhosting}"
+WEBHOSTING_SSH_KEY="${WEBHOSTING_SSH_KEY:-/home/hermes/.ssh/id_ed25519_monitoring}"
 WEBHOSTING_SSH_USER="${WEBHOSTING_SSH_USER:-deploy}"
 
 # [1] Konfiguration
