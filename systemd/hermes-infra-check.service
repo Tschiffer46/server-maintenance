@@ -1,0 +1,17 @@
+[Unit]
+Description=Hermes infrastruktur-check (mailcow + web-hosting-prod)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+ExecStart=/bin/bash -c '/usr/local/lib/hermes-monitoring/mailcow-check.sh; /usr/local/lib/hermes-monitoring/webhosting-check.sh'
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hermes-infra-check
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/hermes /var/lib/hermes/monitoring /home/hermes/.ssh
