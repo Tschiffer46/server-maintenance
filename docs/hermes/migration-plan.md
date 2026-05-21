@@ -2,7 +2,7 @@
 
 Target host: **77.42.81.134** (currently runs OpenClaw in production).
 Hermes Agent: https://github.com/NousResearch/hermes-agent (v0.14.0+).
-LLM provider: **Nous Portal**.
+LLM provider: **Nous Portal** – modell `deepseek/deepseek-v4-flash`.
 
 The plan is shipped stepwise. Run each phase, run its verification, only
 then move to the next. Phase 7 (remove OpenClaw) does not run until
@@ -13,7 +13,7 @@ phase 1-6 are green.
 | 0 | Snapshot OpenClaw state | `scripts/hermes/phase0-backup-openclaw.sh` | shipped |
 | 1 | Install Hermes alongside OpenClaw | `scripts/hermes/phase1-install-hermes.sh` | shipped |
 | 2 | Cut Telegram over to Hermes via `hermes claw migrate` | `scripts/hermes/phase2-cutover.sh` | shipped |
-| 3 | Site / uptime monitoring as Hermes skills | tbd | pending |
+| 3 | Site / uptime monitoring as systemd timers | `scripts/hermes/phase3-setup-monitoring.sh` | scripts ready |
 | 4 | Infra monitoring (mailcow, web-hosting-prod, local) | tbd | pending |
 | 5 | Email triage over IMAP | tbd | pending |
 | 6 | History / trends in SQLite | tbd | pending |
@@ -144,30 +144,87 @@ If Telegram does **not** respond:
 
 ---
 
-## Phase 3-8
+## Phase 3 - site/uptime-övervakning
 
-Filled in in the next commits, once phase 2 is verified on the host.
-Short outline:
+**Goal:** Hermes bevakar 14 sajter var 5:e minut med HTTP-check, var 6:e
+timme med SSL/DNS-check, och skickar en daglig rapport kl 08:00.
+Varningar går direkt till Telegram. Inga åtgärder krävs från din sida
+när en sajt återhämtar sig – Hermes skickar ett grönt meddelande självt.
 
-- **Phase 3:** site uptime + SSL + DNS skills, cron-style schedule, daily
-  08:00 site report.
-- **Phase 4:** SSH-based health checks against mailcow and
-  web-hosting-prod; local checks for the ops host itself.
-- **Phase 5:** IMAP poller against mail.schiffer.se:993 for the three
-  accounts; LLM triage; WhatsApp pings for red-tier mail (channel choice
-  tbd - WhatsApp was not in OpenClaw, so we add it net-new or repurpose
-  Telegram).
-- **Phase 6:** SQLite schema for metrics + incidents; conversational
-  query skill (`Hur var uptimen ...`).
-- **Phase 7:** stop and uninstall OpenClaw npm package; remove the unit
-  files we left behind; drop UFW rule for 18789; remove nvm if unused
-  elsewhere; `hermes doctor` confirms independence.
-- **Phase 8:** harden (rate limits, secrets workflow, restrict gateway
-  to 127.0.0.1), daily backup of `/home/hermes/.hermes/` to Hetzner
-  Storage Box, freeze README + rollback doc.
+**Sajter som övervakas** (redigera `config/sites.conf` för att ändra):
+- Egna domäner: agiletransition.se, schiffer.se, digitaltoberoende.se,
+  digitalsovereignty.eu, euproof.eu
+- WaaS-kundsajter: azprofil, azp2b, hemsidor, azstore, schiffer (WaaS),
+  seatower, stegvis, voxtera, forfor (alla under .agiletransition.se)
 
-The legacy GitHub Actions in `.github/workflows/` and the scripts they
-call (`backup-databases.sh`, `health-check.sh`, `collect-metrics.sh`,
-`update-server.sh`) stay in place until phase 7 verifies Hermes has
-taken over their function. They are then disabled (workflow `on:` blocks
-stripped) in the same PR that removes OpenClaw.
+**Arkitektur:**
+- Tre systemd-services körs som `hermes`-användaren
+- Styrda av tre systemd-timers (site-check, ssl-check, daily-report)
+- Loggar till `/var/log/hermes/monitoring.log`
+- Tillståndsfiler i `/var/lib/hermes/monitoring/state/` (för
+  up/down-detektering utan upprepade varningar)
+- Telegram-credentials lagras i `/home/hermes/.config/hermes-monitoring/env`
+  (rättigheter 600, bara läsbar av hermes)
+
+**Installera på servern:**
+
+```bash
+# 1. Hämta senaste koden
+git -C ~/server-maintenance pull
+
+# 2. Kör installationsskriptet
+sudo bash ~/server-maintenance/scripts/hermes/phase3-setup-monitoring.sh
+```
+
+Skriptet frågar efter Telegram-credentials om de inte hittas automatiskt.
+
+### Verification
+
+```bash
+sudo bash ~/server-maintenance/scripts/hermes/phase3-verify.sh
+```
+
+Måste vara grönt: skript installerade, sites.conf, credentials, alla 6
+systemd-units, alla 3 timers aktiva.
+
+**Manuellt test:**
+```bash
+# Kör site-check direkt (för att se output och få ett Telegram-test)
+sudo -u hermes bash /usr/local/lib/hermes-monitoring/site-check.sh
+
+# Kontrollera logg
+tail -20 /var/log/hermes/monitoring.log
+
+# Se när timers körs nästa gång
+systemctl list-timers hermes-*
+```
+
+Fel och åtgärder:
+- Sajt visas som NER fast den är uppe: kontrollera att URL är korrekt i
+  `config/sites.conf` och att förväntat HTTP-svar stämmer (vissa
+  sajter returnerar 301/302)
+- Telegram-notifiering kommer inte: kolla `/var/log/hermes/monitoring.log`
+  för "Telegram-credentials saknas"
+
+---
+
+## Phase 4-8
+
+Fylls i i nästa commits.
+
+- **Phase 4:** SSH-baserade hälsokontroller mot mailcow och
+  web-hosting-prod; lokala kontroller för ops-hosten.
+- **Phase 5:** IMAP-polling mot mail.schiffer.se:993 för tre konton;
+  LLM-triage; WhatsApp-pings för röda mail.
+- **Phase 6:** SQLite-schema för metrics + incidenter; konversationell
+  fråga-skärmk.
+- **Phase 7:** avinstallera OpenClaw npm-paketet, ta bort unit-filer,
+  droppa UFW-regel för 18789, ta bort nvm om oanvänd.
+- **Phase 8:** härdning, daglig backup av `/home/hermes/.hermes/` till
+  Hetzner Storage Box, fräs README + rollback-doc.
+
+De befintliga GitHub Actions-workflows (`.github/workflows/`) och skripten
+de anropar (`backup-databases.sh`, `health-check.sh`, `collect-metrics.sh`,
+`update-server.sh`) lämnas berörda tills fas 7 bekräftar att Hermes tagit
+över deras funktion. De inaktiveras sedan (workflow `on:`-block tas bort)
+i samma PR som tar bort OpenClaw.

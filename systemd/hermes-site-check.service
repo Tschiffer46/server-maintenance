@@ -1,0 +1,17 @@
+[Unit]
+Description=Hermes site uptime check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+ExecStart=/usr/local/lib/hermes-monitoring/site-check.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hermes-site-check
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/hermes /var/lib/hermes/monitoring

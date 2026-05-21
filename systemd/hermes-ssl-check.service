@@ -1,0 +1,17 @@
+[Unit]
+Description=Hermes SSL and DNS check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+ExecStart=/usr/local/lib/hermes-monitoring/ssl-check.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hermes-ssl-check
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/hermes

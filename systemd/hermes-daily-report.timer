@@ -1,0 +1,11 @@
+[Unit]
+Description=Skickar daglig Hermes-rapport kl 08:00
+After=hermes.service
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

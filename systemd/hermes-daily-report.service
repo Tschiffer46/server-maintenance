@@ -1,0 +1,17 @@
+[Unit]
+Description=Hermes daglig statusrapport
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+ExecStart=/usr/local/lib/hermes-monitoring/daily-report.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hermes-daily-report
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/hermes /var/lib/hermes/monitoring
