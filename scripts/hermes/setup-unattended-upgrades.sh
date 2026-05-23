@@ -46,7 +46,13 @@ Unattended-Upgrade::Origins-Pattern {
 };
 
 // Aldrig automatisk omstart – vi rapporterar i daglig rapport istället
-Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
+// Reboot körs ENDAST om /var/run/reboot-required finns. Vald tid 05:45
+// lokal, dvs ca 15 min efter att paketen installerats. Ändra till "false"
+// här (eller kör skriptet igen efter att ha bytt) när servern är i
+// produktion och du själv vill schemalägga omstart.
+Unattended-Upgrade::Automatic-Reboot-Time "05:45";
 
 // Behåll konfigurationsfiler vid uppgradering
 Unattended-Upgrade::MinimalSteps "true";
