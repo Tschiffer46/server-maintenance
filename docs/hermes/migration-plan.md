@@ -129,13 +129,74 @@ kör setup-skriptet igen.
 
 ---
 
-## Phase 5-8
+## Phase 5 - uppdateringsövervakning
 
-- **Phase 5:** IMAP-polling mot mail.schiffer.se:993 för tre konton;
+Två lager:
+
+**A) Automatisk installation av enbart säkerhetspatcher kl 05:00**
+- `unattended-upgrades` + `apt-listchanges` på alla tre servrar
+- Endast Debian-Security / Ubuntu security-pocket installeras
+- Reboot körs ALDRIG automatiskt – notis i daglig rapport om det krävs
+
+**B) Daglig sammanställning (07:50, plockad upp av 08:00-rapporten)**
+- Antal tillgängliga säkerhetspaket per server
+- Antal övriga paket-uppdateringar per server
+- "Omstart krävs"-flagga (`/var/run/reboot-required`)
+- Mailcow-version vs senaste GitHub release med uppgraderings-instruktioner
+
+Filer i repo:
+- `scripts/hermes/monitoring/update-check.sh` – samlar status från alla 3
+- `scripts/hermes/setup-unattended-upgrades.sh` – körs en gång per server
+- `scripts/hermes/phase5-setup-updates.sh` – installerar update-check + timer på ATM-shops
+- `scripts/hermes/phase5-verify.sh` – verifierar fas 5
+- `systemd/hermes-update-check.{service,timer}`
+
+Installation:
+
+```bash
+cd ~/server-maintenance
+git pull origin claude/migrate-openclaw-hermes-eupAL
+
+# Lokalt på ATM-shops: installera update-check + timer
+sudo bash scripts/hermes/phase5-setup-updates.sh
+
+# Sätt på unattended-upgrades på ATM-shops
+sudo bash scripts/hermes/setup-unattended-upgrades.sh
+
+# Sätt på unattended-upgrades på mailcow-server (via SSH som root)
+scp scripts/hermes/setup-unattended-upgrades.sh root@204.168.157.75:/tmp/
+ssh root@204.168.157.75 'bash /tmp/setup-unattended-upgrades.sh && rm /tmp/setup-unattended-upgrades.sh'
+
+# På web-hosting-prod (kräver inloggning som vanlig användare med sudo)
+ssh deploy@89.167.90.112
+# på servern:
+curl -sO https://raw.githubusercontent.com/Tschiffer46/server-maintenance/claude/migrate-openclaw-hermes-eupAL/scripts/hermes/setup-unattended-upgrades.sh
+sudo bash setup-unattended-upgrades.sh
+rm setup-unattended-upgrades.sh
+exit
+
+# Verifiera
+sudo bash scripts/hermes/phase5-verify.sh
+```
+
+**Notiser om riskfyllda uppgraderingar** kommer som del av 08:00-rapporten,
+t.ex.:
+- Mailcow-uppdatering – instruktion: `cd /opt/mailcow-dockerized && ./update.sh`
+- Reboot krävs – schemalägg manuellt: `sudo reboot`
+- Stora paket-uppdateringar – kör manuellt: `sudo apt upgrade`
+
+Skulle något misslyckas: logg ligger på respektive server i
+`/var/log/unattended-upgrades/unattended-upgrades.log`.
+
+---
+
+## Phase 6-9
+
+- **Phase 6:** IMAP-polling mot mail.schiffer.se:993 för tre konton;
   LLM-triage (röd/gul/grön); Telegram-varning för röda mail.
-- **Phase 6:** SQLite-schema för metrics + incidenter;
+- **Phase 7:** SQLite-schema för metrics + incidenter;
   konversationell fråge-skill (`Hur var uptimen igår?`).
-- **Phase 7:** avinstallera OpenClaw npm-paketet, ta bort unit-filer,
+- **Phase 8:** avinstallera OpenClaw npm-paketet, ta bort unit-filer,
   droppa UFW-regel för 18789, ta bort nvm om oanvänd.
-- **Phase 8:** härdning, daglig backup av `/home/hermes/.hermes/` till
+- **Phase 9:** härdning, daglig backup av `/home/hermes/.hermes/` till
   Hetzner Storage Box, frys README + rollback-doc.

@@ -106,6 +106,66 @@ if [ -n "$ssl_expiring" ]; then
     msg="${msg}\n\n🔒 <b>SSL-certifikat att förnya snart:</b>${ssl_expiring}"
 fi
 
+# --- Uppdateringssektion ---
+read_kv() { grep "^$2:" "$1" 2>/dev/null | head -1 | cut -d: -f2- ; }
+
+format_host_updates() {
+    local label="$1" file="$2"
+    [ ! -f "$file" ] && return
+    local sec upd reboot
+    sec=$(read_kv "$file" SEC)
+    upd=$(read_kv "$file" UPD)
+    reboot=$(read_kv "$file" REBOOT)
+    [ -z "$sec$upd$reboot" ] && return
+
+    local line="  • <b>${label}</b>: "
+    local parts=""
+    if [ "$sec" = "0" ] && [ "$upd" = "0" ] && [ "$reboot" = "no" ]; then
+        parts="aktuell ✅"
+    else
+        [ "$sec" != "0" ] && [ "$sec" != "?" ] && parts="${parts}${sec} säkerhetspaket, "
+        [ "$upd" != "0" ] && [ "$upd" != "?" ] && parts="${parts}${upd} övriga paket, "
+        [ "$reboot" = "yes" ] && parts="${parts}<b>omstart krävs</b>, "
+        [ "$sec" = "?" ] && parts="${parts}status okänd, "
+        parts="${parts%, }"
+    fi
+    echo "${line}${parts}"
+}
+
+updates_section=""
+for host_label in "atm-shops:ATM-shops" "mailcow:mailcow-server" "web-hosting:web-hosting-prod"; do
+    label_key="${host_label%%:*}"
+    label_display="${host_label##*:}"
+    line=$(format_host_updates "$label_display" "$STATE_DIR/updates.${label_key}.txt")
+    [ -n "$line" ] && updates_section="${updates_section}\n${line}"
+done
+
+# Mailcow-app jämförelse
+mailcow_app_file="$STATE_DIR/updates.mailcow-app.txt"
+mailcow_section=""
+if [ -f "$mailcow_app_file" ]; then
+    installed=$(read_kv "$mailcow_app_file" INSTALLED)
+    latest=$(read_kv "$mailcow_app_file" LATEST)
+    if [ -n "$installed" ] && [ -n "$latest" ] && \
+       [ "$installed" != "unknown" ] && [ "$latest" != "unknown" ] && \
+       [ "$installed" != "n/a" ]; then
+        if [ "$installed" != "$latest" ]; then
+            mailcow_section="\n\n📦 <b>Mailcow-app uppdatering tillgänglig</b>"
+            mailcow_section="${mailcow_section}\n  Installerad: <code>${installed}</code>"
+            mailcow_section="${mailcow_section}\n  Senaste:     <code>${latest}</code>"
+            mailcow_section="${mailcow_section}\n  Så här uppdaterar du (kräver paus i mailtrafiken ~5 min):"
+            mailcow_section="${mailcow_section}\n  <code>ssh root@204.168.157.75</code>"
+            mailcow_section="${mailcow_section}\n  <code>cd /opt/mailcow-dockerized &amp;&amp; ./update.sh</code>"
+            mailcow_section="${mailcow_section}\n  Läs release-notes först: https://github.com/mailcow/mailcow-dockerized/releases/latest"
+        fi
+    fi
+fi
+
+if [ -n "$updates_section" ]; then
+    msg="${msg}\n\n🔧 <b>Uppdateringar:</b>${updates_section}"
+fi
+[ -n "$mailcow_section" ] && msg="${msg}${mailcow_section}"
+
 msg="${msg}\n\nNästa rapport: imorgon 08:00"
 
 send_telegram "$msg"

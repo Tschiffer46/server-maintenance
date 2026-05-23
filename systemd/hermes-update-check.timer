@@ -1,0 +1,12 @@
+[Unit]
+Description=Daglig kontroll av tillgängliga paketuppdateringar
+Requires=hermes-update-check.service
+
+[Timer]
+# Körs 07:50 – precis innan daily-report 08:00 plockar upp resultatet
+OnCalendar=*-*-* 07:50:00
+RandomizedDelaySec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

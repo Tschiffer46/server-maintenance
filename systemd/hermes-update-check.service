@@ -1,0 +1,16 @@
+[Unit]
+Description=Hermes update check (apt + mailcow version)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+ExecStart=/usr/local/lib/hermes-monitoring/update-check.sh
+# Behöver kunna köra apt-get update på lokal host
+AmbientCapabilities=
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
