@@ -52,10 +52,10 @@ else
     nok "unattended-upgrades inte aktiverat – kör setup-unattended-upgrades.sh"
 fi
 
-if systemctl list-timers apt-daily-upgrade.timer 2>/dev/null | grep -q '05:00'; then
+if [ -f /etc/systemd/system/apt-daily-upgrade.timer.d/override.conf ] && \
+   grep -q '05:00:00' /etc/systemd/system/apt-daily-upgrade.timer.d/override.conf 2>/dev/null; then
     ok "apt-daily-upgrade.timer körtid satt till 05:00"
 else
-    # Kan vara annan tid om setup inte körts än
     nok "apt-daily-upgrade.timer kör inte 05:00 (kör setup-unattended-upgrades.sh för att åtgärda)"
 fi
 

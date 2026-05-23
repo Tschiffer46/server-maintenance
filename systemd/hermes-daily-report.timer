@@ -3,7 +3,7 @@ Description=Skickar daglig Hermes-rapport kl 08:00
 After=hermes.service
 
 [Timer]
-OnCalendar=*-*-* 08:00:00
+OnCalendar=*-*-* 08:00:00 Europe/Stockholm
 AccuracySec=1min
 Persistent=true
 
