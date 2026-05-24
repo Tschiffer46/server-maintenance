@@ -45,13 +45,14 @@ if [ ! -f "$SITES_CONF" ]; then
     exit 1
 fi
 
-while IFS='|' read -r url name expected_code; do
+while IFS='|' read -r url name expected_codes; do
     # Hoppa över kommentarsrader och tomma rader
     [[ "$url" =~ ^[[:space:]]*#.*$ || -z "${url// }" ]] && continue
 
     url="${url// }"
     name="${name// }"
-    expected_code="${expected_code// }"
+    expected_codes="${expected_codes// }"
+    [ -z "$expected_codes" ] && expected_codes="200"
 
     # Använd URL som nökkel för tillståndsfilen (sänkta tecken)
     state_key=$(echo "$url" | tr -cs 'a-zA-Z0-9' '_')
@@ -67,7 +68,14 @@ while IFS='|' read -r url name expected_code; do
     prev_status="up"
     [ -f "$state_file" ] && prev_status=$(cat "$state_file")
 
-    if [ "$http_code" = "$expected_code" ]; then
+    # Acceptera flera koder separerade med komma (ex: "200,401,403")
+    is_ok="no"
+    IFS=',' read -ra accepted <<< "$expected_codes"
+    for code in "${accepted[@]}"; do
+        [ "$http_code" = "$code" ] && is_ok="yes" && break
+    done
+
+    if [ "$is_ok" = "yes" ]; then
         log "OK   $name ($url) → HTTP $http_code"
         if [ "$prev_status" = "down" ]; then
             send_telegram "✅ <b>${name}</b> är tillbaka!\n${url}\nHTTP ${http_code}"
@@ -75,9 +83,9 @@ while IFS='|' read -r url name expected_code; do
         fi
         echo "up" > "$state_file"
     else
-        log "FAIL $name ($url) → HTTP ${http_code} (förväntat ${expected_code})"
+        log "FAIL $name ($url) → HTTP ${http_code} (förväntat ${expected_codes})"
         if [ "$prev_status" != "down" ]; then
-            send_telegram "🚨 <b>${name}</b> är NER!\n${url}\nHTTP ${http_code} (förväntat ${expected_code})\nTid: $(date '+%H:%M %Z')"
+            send_telegram "🚨 <b>${name}</b> är NER!\n${url}\nHTTP ${http_code} (förväntat ${expected_codes})\nTid: $(date '+%H:%M %Z')"
         fi
         echo "down" > "$state_file"
     fi

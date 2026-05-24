@@ -106,9 +106,12 @@ if [ -n "${MAILCOW_HOST:-}" ] && [ -f "${MAILCOW_SSH_KEY:-}" ]; then
         2>/dev/null || echo "unknown")
     installed="${installed:-unknown}"
 
+    # JSON är ofta minifierad – parsa "tag_name" robust med sed
     latest=$(curl -sf --max-time 15 \
         https://api.github.com/repos/mailcow/mailcow-dockerized/releases/latest \
-        2>/dev/null | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)
+        2>/dev/null \
+        | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+        | head -1 || true)
     latest="${latest:-unknown}"
 
     {

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Körs dagligen kl 08:00 av hermes-daily-report.timer.
-# Läser tillståndsfiler och SSL-data, skickar en daglig summering via Telegram.
+# Bygger en kompakt, actionable rapport: rubrik, eventuella problem, eventuella TODOs.
+# Inga 60-dagars-listor, inga "X körs som vanligt"-rader om allt är OK.
 
 set -euo pipefail
 
@@ -8,6 +9,7 @@ SITES_CONF="/etc/hermes-monitoring/sites.conf"
 ENV_FILE="/home/hermes/.config/hermes-monitoring/env"
 STATE_DIR="/var/lib/hermes/monitoring/state"
 LOG_FILE="/var/log/hermes/monitoring.log"
+SSL_WARN_DAYS=30   # visa enbart cert under denna gräns
 
 # shellcheck source=/dev/null
 [ -f "$ENV_FILE" ] && source "$ENV_FILE"
@@ -46,17 +48,17 @@ check_ssl_days() {
     echo "$days_left"
 }
 
+read_kv() { grep "^$2:" "$1" 2>/dev/null | head -1 | cut -d: -f2- ; }
+
 mkdir -p "$(dirname "$LOG_FILE")"
+[ ! -f "$SITES_CONF" ] && { log "FEL: $SITES_CONF saknas"; exit 1; }
 
-if [ ! -f "$SITES_CONF" ]; then
-    log "FEL: $SITES_CONF saknas"
-    exit 1
-fi
-
+# === Sajter ===
 total=0
 up_count=0
 down_list=""
-ssl_expiring=""
+ssl_warn=""        # detaljer för cert < SSL_WARN_DAYS
+ssl_min_days=9999  # minst antal dagar bland alla cert (för en kort summering)
 
 while IFS='|' read -r url name _expected; do
     [[ "$url" =~ ^[[:space:]]*#.*$ || -z "${url// }" ]] && continue
@@ -65,7 +67,6 @@ while IFS='|' read -r url name _expected; do
     host=$(echo "$url" | sed 's|https\?://||' | cut -d/ -f1 | cut -d: -f1)
 
     total=$(( total + 1 ))
-
     state_key=$(echo "$url" | tr -cs 'a-zA-Z0-9' '_')
     state_file="$STATE_DIR/${state_key}.status"
     status="okänd"
@@ -74,99 +75,122 @@ while IFS='|' read -r url name _expected; do
     if [ "$status" = "up" ]; then
         up_count=$(( up_count + 1 ))
     else
-        down_list="${down_list}\n  • ${name} (${url}) – status: ${status}"
+        down_list="${down_list}\n  • ${name} (${url})"
     fi
 
-    # SSL-kollar bara i dagliga rapporten om < 60 dagar kvar
     if [[ "$url" == https://* ]]; then
         days=$(check_ssl_days "$host")
-        if [ "$days" -lt 60 ] 2>/dev/null && [ "$days" -ge 0 ] 2>/dev/null; then
-            ssl_expiring="${ssl_expiring}\n  • ${name}: ${days} dagar kvar"
+        if [ "$days" -ge 0 ] 2>/dev/null; then
+            [ "$days" -lt "$ssl_min_days" ] 2>/dev/null && ssl_min_days="$days"
+            if [ "$days" -lt "$SSL_WARN_DAYS" ] 2>/dev/null; then
+                ssl_warn="${ssl_warn}\n  • ${name}: <b>${days} dagar kvar</b>"
+            fi
         fi
     fi
-
 done < "$SITES_CONF"
 
-# Bygg rapport
+# === Bygg meddelandet ===
+msg="📊 <b>Daglig statusrapport</b> – $(date '+%Y-%m-%d')"
+
+# --- Sajter ---
 if [ "$up_count" -eq "$total" ]; then
-    status_line="✅ Alla ${total} sajter är uppe"
+    msg="${msg}\n\n✅ Alla ${total} sajter svarar som väntat"
 else
     down_count=$(( total - up_count ))
-    status_line="🚨 ${down_count} av ${total} sajter är NERE"
+    msg="${msg}\n\n🚨 <b>${down_count} av ${total} sajter svarar inte:</b>${down_list}"
+    msg="${msg}\n\n  ↳ Om en sajt är nere och du vet att det inte är ett problem (t.ex. login krävs),"
+    msg="${msg}\n     uppdatera <code>config/sites.conf</code> och lägg till statuskoden – ex: <code>...|Namn|200,401</code>"
 fi
 
-msg="📊 <b>Daglig statusrapport</b> – $(date '+%Y-%m-%d %H:%M')"
-msg="${msg}\n\n${status_line}"
-
-if [ -n "$down_list" ]; then
-    msg="${msg}\n\n<b>Sajter som är nere:</b>${down_list}"
+# --- SSL ---
+if [ -n "$ssl_warn" ]; then
+    msg="${msg}\n\n🔒 <b>SSL att förnya inom ${SSL_WARN_DAYS} dagar:</b>${ssl_warn}"
+elif [ "$ssl_min_days" -lt 9999 ] 2>/dev/null; then
+    msg="${msg}\n\n🔒 SSL OK – närmaste utgång om ${ssl_min_days} dagar"
 fi
 
-if [ -n "$ssl_expiring" ]; then
-    msg="${msg}\n\n🔒 <b>SSL-certifikat att förnya snart:</b>${ssl_expiring}"
-fi
+# === Uppdateringar ===
+# För varje host: installerade i natt, väntar, reboot
+host_section() {
+    local label="$1" key="$2" log_host_cmd="$3"
+    local f="$STATE_DIR/updates.${key}.txt"
+    [ ! -f "$f" ] && return
+    local sec upd reboot installed_last_night
+    sec=$(read_kv "$f" SEC)
+    upd=$(read_kv "$f" UPD)
+    reboot=$(read_kv "$f" REBOOT)
 
-# --- Uppdateringssektion ---
-read_kv() { grep "^$2:" "$1" 2>/dev/null | head -1 | cut -d: -f2- ; }
-
-format_host_updates() {
-    local label="$1" file="$2"
-    [ ! -f "$file" ] && return
-    local sec upd reboot
-    sec=$(read_kv "$file" SEC)
-    upd=$(read_kv "$file" UPD)
-    reboot=$(read_kv "$file" REBOOT)
-    [ -z "$sec$upd$reboot" ] && return
-
-    local line="  • <b>${label}</b>: "
-    local parts=""
-    if [ "$sec" = "0" ] && [ "$upd" = "0" ] && [ "$reboot" = "no" ]; then
-        parts="aktuell ✅"
-    else
-        [ "$sec" != "0" ] && [ "$sec" != "?" ] && parts="${parts}${sec} säkerhetspaket, "
-        [ "$upd" != "0" ] && [ "$upd" != "?" ] && parts="${parts}${upd} övriga paket, "
-        [ "$reboot" = "yes" ] && parts="${parts}<b>omstart krävs</b>, "
-        [ "$sec" = "?" ] && parts="${parts}status okänd, "
-        parts="${parts%, }"
+    # Försök hitta installerade paket från senaste unattended-upgrade
+    if [ "$key" = "atm-shops" ]; then
+        installed_last_night=$(grep -h "$(date '+%Y-%m-%d')\|$(date -d 'yesterday' '+%Y-%m-%d')" \
+            /var/log/unattended-upgrades/unattended-upgrades.log 2>/dev/null \
+            | grep -c 'Packages that will be upgraded:' || true)
     fi
-    echo "${line}${parts}"
+
+    local out="  • <b>${label}</b>: "
+    if [ "$sec" = "?" ]; then
+        out="${out}status okänd"
+    elif [ "$sec" = "0" ] && [ "$upd" = "0" ] && [ "$reboot" = "no" ]; then
+        out="${out}aktuell ✅"
+    else
+        local parts=""
+        [ "$sec" != "0" ] && parts="${parts}${sec} säkerhetspaket väntar, "
+        [ "$upd" != "0" ] && parts="${parts}${upd} övriga paket väntar, "
+        [ "$reboot" = "yes" ] && parts="${parts}<b>omstart krävs</b>, "
+        out="${out}${parts%, }"
+    fi
+    echo "$out"
 }
 
 updates_section=""
-for host_label in "atm-shops:ATM-shops" "mailcow:mailcow-server" "web-hosting:web-hosting-prod"; do
-    label_key="${host_label%%:*}"
-    label_display="${host_label##*:}"
-    line=$(format_host_updates "$label_display" "$STATE_DIR/updates.${label_key}.txt")
-    [ -n "$line" ] && updates_section="${updates_section}\n${line}"
-done
+todos=""
 
-# Mailcow-app jämförelse
+line=$(host_section "ATM-shops" "atm-shops" "")
+[ -n "$line" ] && updates_section="${updates_section}\n${line}"
+
+line=$(host_section "mailcow-server" "mailcow" "ssh root@204.168.157.75")
+[ -n "$line" ] && updates_section="${updates_section}\n${line}"
+
+line=$(host_section "web-hosting-prod" "web-hosting" "ssh deploy@89.167.90.112")
+[ -n "$line" ] && updates_section="${updates_section}\n${line}"
+
+[ -n "$updates_section" ] && msg="${msg}\n\n🔧 <b>OS-paket:</b>${updates_section}"
+
+# Generera TODO-lista per host om något kräver handling
+add_todo_if_pending() {
+    local label="$1" key="$2" ssh_cmd="$3"
+    local f="$STATE_DIR/updates.${key}.txt"
+    [ ! -f "$f" ] && return
+    local sec upd reboot
+    sec=$(read_kv "$f" SEC); upd=$(read_kv "$f" UPD); reboot=$(read_kv "$f" REBOOT)
+
+    if [ "$reboot" = "yes" ]; then
+        todos="${todos}\n  • <b>${label}</b>: omstart krävs. Kör:\n      <code>${ssh_cmd}</code>\n      <code>sudo reboot</code>"
+    fi
+    # Övriga paket (ej security) – security tas av unattended-upgrades automatiskt
+    if [ "$upd" != "0" ] && [ "$upd" != "?" ] && [ -n "$upd" ]; then
+        todos="${todos}\n  • <b>${label}</b>: ${upd} icke-säkerhetspaket att uppgradera (valfritt). Kör:\n      <code>${ssh_cmd}</code>\n      <code>sudo apt upgrade</code>"
+    fi
+}
+add_todo_if_pending "ATM-shops"       "atm-shops"   "ssh deploy@77.42.81.134"
+add_todo_if_pending "mailcow-server"  "mailcow"     "ssh root@204.168.157.75"
+add_todo_if_pending "web-hosting-prod" "web-hosting" "ssh deploy@89.167.90.112"
+
+# Mailcow-app
 mailcow_app_file="$STATE_DIR/updates.mailcow-app.txt"
-mailcow_section=""
 if [ -f "$mailcow_app_file" ]; then
     installed=$(read_kv "$mailcow_app_file" INSTALLED)
     latest=$(read_kv "$mailcow_app_file" LATEST)
     if [ -n "$installed" ] && [ -n "$latest" ] && \
        [ "$installed" != "unknown" ] && [ "$latest" != "unknown" ] && \
-       [ "$installed" != "n/a" ]; then
-        if [ "$installed" != "$latest" ]; then
-            mailcow_section="\n\n📦 <b>Mailcow-app uppdatering tillgänglig</b>"
-            mailcow_section="${mailcow_section}\n  Installerad: <code>${installed}</code>"
-            mailcow_section="${mailcow_section}\n  Senaste:     <code>${latest}</code>"
-            mailcow_section="${mailcow_section}\n  Så här uppdaterar du (kräver paus i mailtrafiken ~5 min):"
-            mailcow_section="${mailcow_section}\n  <code>ssh root@204.168.157.75</code>"
-            mailcow_section="${mailcow_section}\n  <code>cd /opt/mailcow-dockerized &amp;&amp; ./update.sh</code>"
-            mailcow_section="${mailcow_section}\n  Läs release-notes först: https://github.com/mailcow/mailcow-dockerized/releases/latest"
-        fi
+       [ "$installed" != "n/a" ] && [ "$installed" != "$latest" ]; then
+        todos="${todos}\n  • <b>Mailcow-app</b>: <code>${installed}</code> → <code>${latest}</code>. Läs release-notes först:\n      https://github.com/mailcow/mailcow-dockerized/releases/tag/${latest}\n      Uppgradera (paus ~5 min):\n      <code>ssh root@204.168.157.75</code>\n      <code>cd /opt/mailcow-dockerized &amp;&amp; ./update.sh</code>"
     fi
 fi
 
-if [ -n "$updates_section" ]; then
-    msg="${msg}\n\n🔧 <b>Uppdateringar:</b>${updates_section}"
+if [ -n "$todos" ]; then
+    msg="${msg}\n\n📋 <b>Att göra:</b>${todos}"
 fi
-[ -n "$mailcow_section" ] && msg="${msg}${mailcow_section}"
-
-msg="${msg}\n\nNästa rapport: imorgon 08:00"
 
 send_telegram "$msg"
 log "Daglig rapport skickad: ${up_count}/${total} uppe"
