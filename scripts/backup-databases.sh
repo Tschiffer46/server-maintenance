@@ -27,6 +27,22 @@ docker compose -f "$COMPOSE_FILE" exec -T voxtera-db \
   ERRORS=$((ERRORS+1))
 }
 
+# Stegvis database
+echo "Backing up Stegvis..."
+docker compose -f "$COMPOSE_FILE" exec -T stegvis-db \
+  pg_dump -U stegvis -d stegvis 2>/dev/null | gzip > "$BACKUP_DIR/stegvis-$DATE.sql.gz" || {
+  echo "ERROR: Stegvis backup failed"
+  ERRORS=$((ERRORS+1))
+}
+
+# VadSkaVi database
+echo "Backing up VadSkaVi..."
+docker compose -f "$COMPOSE_FILE" exec -T vadskavi-db \
+  pg_dump -U vadskavi -d vadskavi 2>/dev/null | gzip > "$BACKUP_DIR/vadskavi-$DATE.sql.gz" || {
+  echo "ERROR: VadSkaVi backup failed"
+  ERRORS=$((ERRORS+1))
+}
+
 # Verify backups are non-empty
 for f in "$BACKUP_DIR"/*-"$DATE".sql.gz; do
   SIZE=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null)
