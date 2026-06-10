@@ -24,6 +24,12 @@ for svc in azprofil azp2b agiletransition hemsidor azstore schiffer seatower; do
   docker compose up -d --force-recreate "$svc" >> "$LOG" 2>&1 || { log "ERROR: Failed to restart $svc"; ERRORS=$((ERRORS+1)); }
 done
 
+# digitaltoberoende (euproof.eu) must NOT be recreated from a bare compose definition:
+# it requires nginx.conf + .htpasswd mounts (dev-phase basic auth) or the password
+# protection silently disappears. Always use the dedicated script.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"$SCRIPT_DIR/redeploy-digitaltoberoende.sh" >> "$LOG" 2>&1 || { log "ERROR: Failed to restart digitaltoberoende"; ERRORS=$((ERRORS+1)); }
+
 # 4. Pull and restart GHCR app images
 log "=== Updating Docker apps ==="
 docker compose pull stegvis voxtera forfor >> "$LOG" 2>&1 || { log "ERROR: Failed to pull app images"; ERRORS=$((ERRORS+1)); }
@@ -39,7 +45,7 @@ sleep 10
 # 7. Quick health check after update
 log "=== Post-update health check ==="
 CONTAINERS=$(docker ps --format '{{.Names}}' | sort)
-EXPECTED="agiletransition azp2b azprofil azstore forfor forfor-db hemsidor proxy-manager schiffer seatower stegvis voxtera voxtera-db"
+EXPECTED="agiletransition azp2b azprofil azstore digitaltoberoende forfor forfor-db hemsidor proxy-manager schiffer seatower stegvis voxtera voxtera-db"
 for name in $EXPECTED; do
   if echo "$CONTAINERS" | grep -q "^${name}$"; then
     log "OK: $name is running"
