@@ -21,6 +21,7 @@ jobs:
 
       - name: Upload and run update script
         run: |
+          set -eo pipefail   # without this the `| tee` below hides a failing/aborted SSH run (false green)
           scp -i ~/.ssh/key scripts/update-server.sh \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/update-server.sh
           ssh -i ~/.ssh/key \

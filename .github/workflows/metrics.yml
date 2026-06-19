@@ -1,6 +1,8 @@
 name: Collect Dashboard Metrics
 
 on:
+  schedule:
+    - cron: '15 */6 * * *'   # every 6 hours (00:15, 06:15, 12:15, 18:15 UTC)
   workflow_dispatch:
 
 permissions:

@@ -77,17 +77,26 @@ echo "--- Setting up unattended-upgrades ---"
 apt-get install -y unattended-upgrades
 cat > /etc/apt/apt.conf.d/50unattended-upgrades << 'UUEOF'
 Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}";          // non-security release updates
     "${distro_id}:${distro_codename}-security";
+    "${distro_id}:${distro_codename}-updates";  // non-security stable updates
+    "${distro_id}ESMApps:${distro_codename}-apps-security";
+    "${distro_id}ESM:${distro_codename}-infra-security";
 };
 Unattended-Upgrade::AutoFixInterruptedDpkg "true";
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
-Unattended-Upgrade::Automatic-Reboot "false";
+// Reboot automatically, but only when an update requires it (e.g. kernel),
+// and only at a fixed low-traffic time so reboot-required never piles up for weeks.
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
+Unattended-Upgrade::Automatic-Reboot-Time "04:00";
 UUEOF
 cat > /etc/apt/apt.conf.d/20auto-upgrades << 'AUEOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
 AUEOF
-echo "Unattended upgrades configured (security patches only, no auto-reboot)"
+echo "Unattended upgrades configured (security + non-security, auto-reboot 04:00 when required)"
 
 # 5. Docker Daemon Hardening
 echo ""
