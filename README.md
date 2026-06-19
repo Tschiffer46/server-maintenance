@@ -55,7 +55,7 @@ This sets up:
 - UFW firewall (ports 22, 80, 443 only — port 81 blocked)
 - fail2ban (SSH brute force protection)
 - SSH hardening (no root login, no password auth)
-- Unattended security upgrades
+- Unattended upgrades (security **and** non-security, auto-reboot at 04:00 only when an update requires it)
 - Docker log rotation
 
 ### After Hardening: Access NPM Admin

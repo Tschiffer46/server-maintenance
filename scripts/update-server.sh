@@ -1,15 +1,19 @@
 #!/bin/bash
-set -euo pipefail
+# Note: deliberately NOT using `set -e` — this is a maintenance run that must attempt
+# every step and report a count at the end, rather than abort on the first hiccup
+# (e.g. a transient `apt-get update` mirror error) and exit "successfully early".
+set -uo pipefail
 
 LOG="/tmp/maintenance-$(date +%Y%m%d).log"
 ERRORS=0
 
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG"; }
 
-# 1. OS package updates
+# 1. OS package updates (security AND non-security)
 log "=== OS Updates ==="
-sudo apt-get update >> "$LOG" 2>&1
-sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y >> "$LOG" 2>&1 || { log "ERROR: apt upgrade failed"; ERRORS=$((ERRORS+1)); }
+sudo apt-get update >> "$LOG" 2>&1 || { log "ERROR: apt-get update failed"; ERRORS=$((ERRORS+1)); }
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade >> "$LOG" 2>&1 || { log "ERROR: apt upgrade failed"; ERRORS=$((ERRORS+1)); }
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y autoremove >> "$LOG" 2>&1 || true
 
 # 2. Pull latest base images
 log "=== Docker Image Updates ==="

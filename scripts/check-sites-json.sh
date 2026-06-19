@@ -17,10 +17,12 @@ SITES=(
   "https://euproof.eu/en/"
 )
 
-# euproof.eu is behind dev-phase basic auth (non-sensitive dev credentials).
-# We probe it with credentials so status reflects the actual site, and record
-# whether the protection is enforced (no-auth request must get 401).
-EUPROOF_CREDS="euproof:EUDigSov2026"
+# euproof.eu is behind a dev-phase secret-link COOKIE gate (it was migrated away
+# from HTTP basic auth — see digitaltoberoende/CLAUDE.md). Without the cookie the
+# gate returns 403; with the preview cookie it serves 200. We probe it with the
+# cookie so status reflects the real site, and treat a 401/403 on the no-cookie
+# request as proof the gate is enforced (non-sensitive dev value).
+EUPROOF_COOKIE="euproof_preview=0432885f1a"
 
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -51,10 +53,10 @@ for url in "${SITES[@]}"; do
   auth_args=()
   auth_enforced="null"
   if [ "$host" = "euproof.eu" ]; then
-    auth_args=(-u "$EUPROOF_CREDS")
+    auth_args=(-H "Cookie: $EUPROOF_COOKIE")
     noauth_status=$(curl -o /dev/null -s -w "%{http_code}" --max-time 15 \
       -A "Mozilla/5.0 HealthCheck" "$url" 2>/dev/null || echo "000")
-    if [ "$noauth_status" = "401" ]; then auth_enforced="true"; else auth_enforced="false"; fi
+    if [ "$noauth_status" = "401" ] || [ "$noauth_status" = "403" ]; then auth_enforced="true"; else auth_enforced="false"; fi
   fi
 
   read -r status time_total < <(
