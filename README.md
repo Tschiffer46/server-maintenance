@@ -90,3 +90,18 @@ These must be configured in this repo's settings:
 | stegvis | Docker App | stegvis.agiletransition.se |
 | voxtera | Docker App + PostgreSQL | voxtera.agiletransition.se |
 | forfor | Docker App + PostgreSQL | forfor.agiletransition.se |
+| energi | Docker App + SQLite | energi.agiletransition.se |
+
+## Energi Dashboard
+
+The energy dashboard runs as a standalone compose app in
+`/home/deploy/hosting/energi` (NOT part of the central compose file, so the
+weekly update flow doesn't recreate it). It reads two meters on the home LAN
+through the WireGuard tunnel `wg-hem` (UDP 51820 allowed in UFW; re-running
+`harden-server.sh` does not remove that rule). It is exposed only via NPM
+with Let's Encrypt + an access list — expect HTTP 401 without credentials.
+
+Setup, runbook, tunnel config and rollback scripts live in
+[Tschiffer46/energi](https://github.com/Tschiffer46/energi). Its SQLite
+database is covered by the daily backup as `energi-*.db.gz` (the backup step
+is skipped automatically while the container doesn't exist yet).
