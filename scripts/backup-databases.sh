@@ -27,8 +27,24 @@ docker compose -f "$COMPOSE_FILE" exec -T voxtera-db \
   ERRORS=$((ERRORS+1))
 }
 
+# Energi dashboard (SQLite, standalone compose — see Tschiffer46/energi).
+# sqlite3's .backup is safe against concurrent writes from the poller.
+# Skipped silently until the energi container exists on the server.
+if docker ps --format '{{.Names}}' | grep -q '^energi$'; then
+  echo "Backing up energi..."
+  if docker exec energi sqlite3 /app/energi.db ".backup /tmp/energi-backup.db" \
+    && docker cp energi:/tmp/energi-backup.db "$BACKUP_DIR/energi-$DATE.db" \
+    && gzip -f "$BACKUP_DIR/energi-$DATE.db"; then
+    docker exec energi rm -f /tmp/energi-backup.db
+  else
+    echo "ERROR: energi backup failed"
+    ERRORS=$((ERRORS+1))
+  fi
+fi
+
 # Verify backups are non-empty
-for f in "$BACKUP_DIR"/*-"$DATE".sql.gz; do
+for f in "$BACKUP_DIR"/*-"$DATE".sql.gz "$BACKUP_DIR"/*-"$DATE".db.gz; do
+  [ -e "$f" ] || continue
   SIZE=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null)
   if [ "$SIZE" -lt 100 ]; then
     echo "ERROR: Backup $f is suspiciously small (${SIZE} bytes)"
@@ -39,13 +55,13 @@ for f in "$BACKUP_DIR"/*-"$DATE".sql.gz; do
 done
 
 # Rotate: delete backups older than 14 days
-DELETED=$(find "$BACKUP_DIR" -name "*.sql.gz" -mtime +$RETAIN_DAYS -delete -print | wc -l)
+DELETED=$(find "$BACKUP_DIR" \( -name "*.sql.gz" -o -name "*.db.gz" \) -mtime +$RETAIN_DAYS -delete -print | wc -l)
 echo "Rotated: $DELETED old backup(s) removed"
 
 # Summary
 echo "=== Backup summary ==="
 echo "Total backups on disk:"
-ls -lh "$BACKUP_DIR"/*.sql.gz 2>/dev/null || echo "  (none)"
+ls -lh "$BACKUP_DIR"/*.gz 2>/dev/null || echo "  (none)"
 du -sh "$BACKUP_DIR" 2>/dev/null
 
 exit $ERRORS

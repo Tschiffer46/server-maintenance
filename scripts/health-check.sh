@@ -18,6 +18,9 @@ SITES=(
   "https://stegvis.agiletransition.se"
   "https://voxtera.agiletransition.se"
   "https://forfor.agiletransition.se"
+  # energi is behind an NPM access list: 401 without credentials still
+  # confirms the proxy + container are up (counted OK by the <500 rule)
+  "https://energi.agiletransition.se"
 )
 
 for url in "${SITES[@]}"; do
