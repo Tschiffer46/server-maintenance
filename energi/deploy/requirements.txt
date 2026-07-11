@@ -1,6 +1,0 @@
-fastapi
-uvicorn
-pymodbus==3.6.9
-# Om app.py importerar fler paket (kolla med: grep -E '^(import|from)' app.py),
-# lägg till dem här och bygg om. Vanligast:
-# requests
