@@ -1,0 +1,31 @@
+services:
+  energi:
+    build: .
+    container_name: energi
+    restart: always
+    # APP_CMD sätts i .env av scripts/60-deploy.sh om app.py inte lyssnar på
+    # 0.0.0.0 (krävs för att NPM ska nå containern). Standard: kör som på Macen.
+    command: ${APP_CMD:-python app.py}
+    environment:
+      - TZ=Europe/Stockholm
+    volumes:
+      - ./app:/app
+    ports:
+      # Endast loopback på servern — för felsökning/verifiering via SSH.
+      # Publikt exponeras appen bara via NPM (https + auth).
+      - "127.0.0.1:8420:8420"
+    networks:
+      - npm
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8420/api/now', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  npm:
+    # NPM:s befintliga dockernät — namnet detekteras av scripts/60-deploy.sh
+    # och skrivs till .env (NPM_NETWORK).
+    external: true
+    name: ${NPM_NETWORK:-web}

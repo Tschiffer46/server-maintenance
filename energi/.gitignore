@@ -1,0 +1,11 @@
+# Databasen ska ALDRIG ligga i git — den kopieras från Macen och lever på servern.
+deploy/app/energi.db
+deploy/app/energi.db-wal
+deploy/app/energi.db-shm
+
+# Lokal miljökonfig som skrivs av 60-deploy.sh på servern
+deploy/.env
+
+__pycache__/
+*.pyc
+.DS_Store
