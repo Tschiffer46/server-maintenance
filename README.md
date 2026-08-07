@@ -90,18 +90,26 @@ These must be configured in this repo's settings:
 | stegvis | Docker App | stegvis.agiletransition.se |
 | voxtera | Docker App + PostgreSQL | voxtera.agiletransition.se |
 | forfor | Docker App + PostgreSQL | forfor.agiletransition.se |
-| energi | Docker App + SQLite | energi.agiletransition.se |
+| energi | Home server (Freja7) + Tailscale | energi.agiletransition.se |
 
 ## Energi Dashboard
 
-The energy dashboard runs as a standalone compose app in
-`/home/deploy/hosting/energi` (NOT part of the central compose file, so the
-weekly update flow doesn't recreate it). It reads two meters on the home LAN
-through the WireGuard tunnel `wg-hem` (UDP 51820 allowed in UFW; re-running
-`harden-server.sh` does not remove that rule). It is exposed only via NPM
-with Let's Encrypt + an access list — expect HTTP 401 without credentials.
+Unlike every other row above, energi does **not** run on this VPS at all —
+it runs on Freja7, an always-on Ubuntu Server at Thomas's home that reads
+two meters (Sungrow inverter, Shelly Pro 3EM) and the Easee/Qvantum cloud
+APIs directly over the home LAN. This VPS only proxies it: Freja7 makes an
+outbound [Tailscale](https://tailscale.com) connection to this server, and
+NPM forwards `energi.agiletransition.se` to Freja7's Tailscale address, with
+Let's Encrypt + an access list in front — expect HTTP 401 without
+credentials. There is no `wg-hem` WireGuard tunnel and no `energi` Docker
+container on this VPS; an earlier plan used both, but the design changed
+before either was deployed here. If `ufw status` still shows `51820/udp`
+allowed, that rule predates the pivot and is safe to remove.
 
-Setup, runbook, tunnel config and rollback scripts live in
-[Tschiffer46/energi](https://github.com/Tschiffer46/energi). Its SQLite
-database is covered by the daily backup as `energi-*.db.gz` (the backup step
-is skipped automatically while the container doesn't exist yet).
+Setup and the Tailscale/NPM runbook live in
+[Tschiffer46/energi](https://github.com/Tschiffer46/energi) (`HEMSERVER.md`
+and `RUNBOOK.md`). Its SQLite database is covered by the daily backup as
+`energi-*.db.gz`, pulled from Freja7 over the same Tailscale link (see
+`scripts/backup-databases.sh` — skipped automatically until
+`FREJA7_TAILSCALE_IP` is filled in there, a one-time step done once Tailscale
+is up).

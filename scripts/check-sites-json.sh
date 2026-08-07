@@ -15,6 +15,9 @@ SITES=(
   "https://voxtera.agiletransition.se"
   "https://forfor.agiletransition.se"
   "https://euproof.eu/en/"
+  # energi is behind an NPM access list: 401 without credentials still
+  # counts as "ok" below (2xx-4xx), same convention as health-check.sh
+  "https://energi.agiletransition.se"
 )
 
 # euproof.eu is behind a dev-phase secret-link COOKIE gate (it was migrated away
