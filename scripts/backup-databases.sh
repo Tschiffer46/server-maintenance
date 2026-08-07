@@ -27,15 +27,29 @@ docker compose -f "$COMPOSE_FILE" exec -T voxtera-db \
   ERRORS=$((ERRORS+1))
 }
 
-# Energi dashboard (SQLite, standalone compose — see Tschiffer46/energi).
-# sqlite3's .backup is safe against concurrent writes from the poller.
-# Skipped silently until the energi container exists on the server.
-if docker ps --format '{{.Names}}' | grep -q '^energi$'; then
-  echo "Backing up energi..."
-  if docker exec energi sqlite3 /app/energi.db ".backup /tmp/energi-backup.db" \
-    && docker cp energi:/tmp/energi-backup.db "$BACKUP_DIR/energi-$DATE.db" \
+# Energi dashboard (SQLite) — does NOT run on this server. It runs on
+# Freja7, Thomas's home server, reached over Tailscale (see
+# Tschiffer46/energi RUNBOOK.md). sqlite3's .backup is safe against
+# concurrent writes from the poller.
+#
+# One-time setup on THIS server before this block does anything:
+#   1. RUNBOOK.md steps 1-2 in Tschiffer46/energi (Tailscale on both ends)
+#   2. ssh-keygen -t ed25519 -f ~/.ssh/energi-backup -N ""
+#   3. Copy ~/.ssh/energi-backup.pub into Freja7's ~/.ssh/authorized_keys
+#      for the user that owns /opt/energi (see HEMSERVER.md)
+#   4. Fill in FREJA7_TAILSCALE_IP and FREJA7_USER below
+# Skipped silently until FREJA7_TAILSCALE_IP is filled in.
+FREJA7_TAILSCALE_IP=""
+FREJA7_USER="thomas"
+if [ -n "$FREJA7_TAILSCALE_IP" ]; then
+  echo "Backing up energi (Freja7, via Tailscale)..."
+  SSH_KEY="$HOME/.ssh/energi-backup"
+  SSH_ENERGI="ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -i $SSH_KEY $FREJA7_USER@$FREJA7_TAILSCALE_IP"
+  if $SSH_ENERGI 'sqlite3 /opt/energi/energi.db ".backup /tmp/energi-backup.db"' \
+    && scp -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -i "$SSH_KEY" \
+       "$FREJA7_USER@$FREJA7_TAILSCALE_IP:/tmp/energi-backup.db" "$BACKUP_DIR/energi-$DATE.db" \
     && gzip -f "$BACKUP_DIR/energi-$DATE.db"; then
-    docker exec energi rm -f /tmp/energi-backup.db
+    $SSH_ENERGI 'rm -f /tmp/energi-backup.db'
   else
     echo "ERROR: energi backup failed"
     ERRORS=$((ERRORS+1))
