@@ -58,6 +58,17 @@ This sets up:
 - Unattended upgrades (security **and** non-security, auto-reboot at 04:00 only when an update requires it)
 - Docker log rotation
 
+### Swap
+
+The server has 3.7 GB RAM. A swapfile gives headroom during Docker
+builds/restarts. To create or resize it idempotently (safe to re-run — it
+turns the swap off before resizing and de-duplicates `/etc/fstab`, avoiding the
+"Text file busy" / "Device or resource busy" trap):
+
+```bash
+sudo bash scripts/ensure-swap.sh 2G   # or 4G
+```
+
 ### After Hardening: Access NPM Admin
 
 Port 81 is blocked by the firewall. Use an SSH tunnel:
