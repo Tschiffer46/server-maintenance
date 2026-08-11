@@ -1,24 +1,24 @@
 {
-  "ts": "2026-08-10T18:33:27Z",
-  "collected_at": "2026-08-10T18:33:42Z",
+  "ts": "2026-08-11T00:33:11Z",
+  "collected_at": "2026-08-11T00:33:27Z",
   "server": {
-    "ts": "2026-08-10T18:33:27Z",
+    "ts": "2026-08-11T00:33:11Z",
     "host": {
       "name": "web-hosting-prod",
       "os": "Ubuntu 24.04.4 LTS",
       "kernel": "6.8.0-137-generic",
-      "uptime_seconds": 307999,
+      "uptime_seconds": 329583,
       "cpus": 2
     },
     "cpu": {
-      "load1": 0.31,
-      "load5": 0.23,
-      "load15": 0.20
+      "load1": 0.42,
+      "load5": 0.32,
+      "load15": 0.24
     },
     "memory": {
       "total_mib": 3819,
-      "used_mib": 1256,
-      "avail_mib": 2562,
+      "used_mib": 1264,
+      "avail_mib": 2555,
       "swap_total_mib": 2047,
       "swap_used_mib": 0
     },
@@ -27,9 +27,9 @@
         "mount": "/",
         "fs": "/dev/sda1",
         "size": 39973924864,
-        "used": 18792812544,
-        "avail": 19496919040,
-        "use_pct": 47
+        "used": 18734206976,
+        "avail": 19555524608,
+        "use_pct": 46
       },
       {
         "mount": "/boot/efi",
@@ -43,8 +43,8 @@
     "network": [
       {
         "iface": "eth0",
-        "rx_bytes": 111762232,
-        "tx_bytes": 145234050
+        "rx_bytes": 119884622,
+        "tx_bytes": 155993276
       },
       {
         "iface": "docker0",
@@ -53,8 +53,8 @@
       },
       {
         "iface": "br-26a660718ca4",
-        "rx_bytes": 116336537,
-        "tx_bytes": 75647084
+        "rx_bytes": 124892214,
+        "tx_bytes": 82046454
       },
       {
         "iface": "br-c737bf576bc2",
@@ -63,93 +63,93 @@
       },
       {
         "iface": "veth42b806e",
-        "rx_bytes": 105021,
-        "tx_bytes": 176681
+        "rx_bytes": 106461,
+        "tx_bytes": 186794
       },
       {
         "iface": "veth603e5ce",
-        "rx_bytes": 197929,
-        "tx_bytes": 203954
+        "rx_bytes": 236788,
+        "tx_bytes": 220336
       },
       {
         "iface": "veth868039a",
-        "rx_bytes": 4827270,
-        "tx_bytes": 2316511
+        "rx_bytes": 4846878,
+        "tx_bytes": 2333733
       },
       {
         "iface": "vetha19b4a3",
-        "rx_bytes": 6678974,
-        "tx_bytes": 1500575
+        "rx_bytes": 6686080,
+        "tx_bytes": 1511072
       },
       {
         "iface": "veth7ee85fc",
-        "rx_bytes": 1050264,
-        "tx_bytes": 513339
+        "rx_bytes": 1052510,
+        "tx_bytes": 523303
       },
       {
         "iface": "veth58e0729",
-        "rx_bytes": 3534936,
-        "tx_bytes": 2204606
+        "rx_bytes": 3543306,
+        "tx_bytes": 2219516
       },
       {
         "iface": "vethe17b1ef",
-        "rx_bytes": 12604655,
-        "tx_bytes": 5787217
+        "rx_bytes": 13984751,
+        "tx_bytes": 6722973
       },
       {
         "iface": "vethda1cb8b",
         "rx_bytes": 126,
-        "tx_bytes": 119544
+        "tx_bytes": 128547
       },
       {
         "iface": "veth4f9b965",
         "rx_bytes": 126,
-        "tx_bytes": 119460
+        "tx_bytes": 128463
       },
       {
         "iface": "veth794b51a",
-        "rx_bytes": 11456856,
-        "tx_bytes": 4629390
+        "rx_bytes": 13121273,
+        "tx_bytes": 5087856
       },
       {
         "iface": "vethbc78007",
-        "rx_bytes": 13859512,
-        "tx_bytes": 1880374
+        "rx_bytes": 15095448,
+        "tx_bytes": 2030356
       },
       {
         "iface": "vethbb51655",
-        "rx_bytes": 530947,
-        "tx_bytes": 341857
+        "rx_bytes": 1311863,
+        "tx_bytes": 369344
       },
       {
         "iface": "vethd39111f",
-        "rx_bytes": 3229987,
-        "tx_bytes": 2444417
+        "rx_bytes": 3961655,
+        "tx_bytes": 2810630
       },
       {
         "iface": "veth6e8f303",
-        "rx_bytes": 804398,
-        "tx_bytes": 688875
+        "rx_bytes": 818197,
+        "tx_bytes": 709955
       },
       {
         "iface": "vetha8cf58f",
-        "rx_bytes": 632037,
-        "tx_bytes": 806064
+        "rx_bytes": 634196,
+        "tx_bytes": 816694
       },
       {
         "iface": "vetha3afe55",
-        "rx_bytes": 2896322,
-        "tx_bytes": 769568
+        "rx_bytes": 2906162,
+        "tx_bytes": 780378
       },
       {
         "iface": "veth0f5cb97",
-        "rx_bytes": 301718,
-        "tx_bytes": 219306
+        "rx_bytes": 302967,
+        "tx_bytes": 229140
       },
       {
         "iface": "veth56486a9",
-        "rx_bytes": 80661862,
-        "tx_bytes": 80534494
+        "rx_bytes": 91381793,
+        "tx_bytes": 92783205
       }
     ],
     "os_updates": {
@@ -175,7 +175,7 @@
         "restart_count": 0,
         "exit_code": 0,
         "cpu_pct": 0.03,
-        "mem_pct": 57.42
+        "mem_pct": 59.19
       },
       {
         "id": "3b44c32cf69bde4ff8c8fb6dbc33d9976db637324beb0dd504cf02dc723d80fb",
@@ -199,7 +199,7 @@
         "restart_count": 0,
         "exit_code": 0,
         "cpu_pct": 0.00,
-        "mem_pct": 9.07
+        "mem_pct": 9.20
       },
       {
         "id": "5df5b9d0a8b514219671f9a07cdd88b030c379c2a68fd2fab46807d645ca0aa3",
@@ -235,7 +235,7 @@
         "restart_count": 0,
         "exit_code": 0,
         "cpu_pct": 0.00,
-        "mem_pct": 5.41
+        "mem_pct": 5.44
       },
       {
         "id": "faf2f9e05fe61f5d280f33bbfb63bd84c0efc9480ff4fe409cff20ecccedc91e",
@@ -271,7 +271,7 @@
         "restart_count": 0,
         "exit_code": 0,
         "cpu_pct": 0.00,
-        "mem_pct": 22.90
+        "mem_pct": 23.04
       },
       {
         "id": "fba1accb65f98b48a9dc952bfcd8381c31d680a38e19aca885647aaaa60c6038",
@@ -282,8 +282,8 @@
         "started": "2026-08-07T05:00:19.851757525Z",
         "restart_count": 0,
         "exit_code": 0,
-        "cpu_pct": 0.93,
-        "mem_pct": 11.18
+        "cpu_pct": 0.01,
+        "mem_pct": 10.82
       },
       {
         "id": "afe6f42c5cf91a7f9bccbd71303ce30be489603f8991728ec8eeffeaeed2e843",
@@ -294,7 +294,7 @@
         "started": "2026-08-07T05:00:19.847853793Z",
         "restart_count": 0,
         "exit_code": 0,
-        "cpu_pct": 0.00,
+        "cpu_pct": 0.01,
         "mem_pct": 20.22
       },
       {
@@ -318,7 +318,7 @@
         "started": "2026-08-07T05:00:19.909390952Z",
         "restart_count": 0,
         "exit_code": 0,
-        "cpu_pct": 0.00,
+        "cpu_pct": 0.87,
         "mem_pct": 8.11
       },
       {
@@ -331,7 +331,7 @@
         "restart_count": 0,
         "exit_code": 0,
         "cpu_pct": 0.00,
-        "mem_pct": 29.46
+        "mem_pct": 29.39
       },
       {
         "id": "7e714e4fd8d21b1b9864e30dbd1f3ac0f0abe34e7ac874a2f5dc561a02c1ef5d",
@@ -355,7 +355,7 @@
         "restart_count": 0,
         "exit_code": 0,
         "cpu_pct": 0.00,
-        "mem_pct": 25.72
+        "mem_pct": 25.75
       },
       {
         "id": "d8a218110ce6acb3142943119d1471f52dba2820c0aa3a486cc55423cfac7df9",
@@ -451,7 +451,7 @@
     "backups": {
       "total_bytes": 2169540,
       "count": 32,
-      "latest_age_hours": 17,
+      "latest_age_hours": 23,
       "latest_name": "voxtera-20260810_0128.sql.gz",
       "latest_size": 20
     }
@@ -461,7 +461,7 @@
       "url": "https://schiffer.agiletransition.se",
       "host": "schiffer.agiletransition.se",
       "status": 200,
-      "response_time_s": 0.766048,
+      "response_time_s": 0.922175,
       "ok": true,
       "cert_days_left": 39,
       "auth_enforced": null
@@ -470,7 +470,7 @@
       "url": "https://seatower.agiletransition.se",
       "host": "seatower.agiletransition.se",
       "status": 200,
-      "response_time_s": 0.863003,
+      "response_time_s": 1.150432,
       "ok": true,
       "cert_days_left": 39,
       "auth_enforced": null
@@ -479,7 +479,7 @@
       "url": "https://hemsidor.agiletransition.se",
       "host": "hemsidor.agiletransition.se",
       "status": 200,
-      "response_time_s": 0.613835,
+      "response_time_s": 0.854461,
       "ok": true,
       "cert_days_left": 39,
       "auth_enforced": null
@@ -488,7 +488,7 @@
       "url": "https://azprofil.agiletransition.se",
       "host": "azprofil.agiletransition.se",
       "status": 200,
-      "response_time_s": 0.713204,
+      "response_time_s": 0.852037,
       "ok": true,
       "cert_days_left": 39,
       "auth_enforced": null
@@ -497,7 +497,7 @@
       "url": "https://azp2b.agiletransition.se",
       "host": "azp2b.agiletransition.se",
       "status": 200,
-      "response_time_s": 0.741345,
+      "response_time_s": 0.956223,
       "ok": true,
       "cert_days_left": 39,
       "auth_enforced": null
@@ -506,7 +506,7 @@
       "url": "https://agiletransition.se",
       "host": "agiletransition.se",
       "status": 200,
-      "response_time_s": 0.641311,
+      "response_time_s": 0.786126,
       "ok": true,
       "cert_days_left": 39,
       "auth_enforced": null
@@ -515,7 +515,7 @@
       "url": "https://azstore.agiletransition.se",
       "host": "azstore.agiletransition.se",
       "status": 200,
-      "response_time_s": 0.593104,
+      "response_time_s": 0.778565,
       "ok": true,
       "cert_days_left": 39,
       "auth_enforced": null
@@ -524,7 +524,7 @@
       "url": "https://stegvis.agiletransition.se",
       "host": "stegvis.agiletransition.se",
       "status": 307,
-      "response_time_s": 0.683594,
+      "response_time_s": 0.934366,
       "ok": true,
       "cert_days_left": 39,
       "auth_enforced": null
@@ -533,7 +533,7 @@
       "url": "https://voxtera.agiletransition.se",
       "host": "voxtera.agiletransition.se",
       "status": 502,
-      "response_time_s": 0.718219,
+      "response_time_s": 0.784053,
       "ok": false,
       "cert_days_left": 39,
       "auth_enforced": null
@@ -542,7 +542,7 @@
       "url": "https://forfor.agiletransition.se",
       "host": "forfor.agiletransition.se",
       "status": 200,
-      "response_time_s": 0.698674,
+      "response_time_s": 0.846193,
       "ok": true,
       "cert_days_left": 39,
       "auth_enforced": null
@@ -551,7 +551,7 @@
       "url": "https://euproof.eu/en/",
       "host": "euproof.eu",
       "status": 200,
-      "response_time_s": 0.767377,
+      "response_time_s": 0.702241,
       "ok": true,
       "cert_days_left": 75,
       "auth_enforced": true
@@ -560,7 +560,7 @@
       "url": "https://energi.agiletransition.se",
       "host": "energi.agiletransition.se",
       "status": 0,
-      "response_time_s": 0.015369,
+      "response_time_s": 0.007340,
       "ok": false,
       "cert_days_left": null,
       "auth_enforced": null
