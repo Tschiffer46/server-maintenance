@@ -15,6 +15,9 @@ SITES=(
   "https://azp2b.agiletransition.se"
   "https://agiletransition.se"
   "https://azstore.agiletransition.se"
+  # moss is a client draft pending approval — blocked in robots.txt, but
+  # that only affects crawlers, not this check
+  "https://moss.agiletransition.se"
   "https://stegvis.agiletransition.se"
   "https://voxtera.agiletransition.se"
   "https://forfor.agiletransition.se"

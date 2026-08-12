@@ -87,10 +87,30 @@ These must be configured in this repo's settings:
 | azstore | Static | azstore.agiletransition.se |
 | schiffer | Static | schiffer.agiletransition.se |
 | seatower | Static | seatower.agiletransition.se |
+| moss | Static (`nginx:alpine`) | moss.agiletransition.se |
 | stegvis | Docker App | stegvis.agiletransition.se |
 | voxtera | Docker App + PostgreSQL | voxtera.agiletransition.se |
 | forfor | Docker App + PostgreSQL | forfor.agiletransition.se |
 | energi | Home server (Freja7) + Tailscale | energi.agiletransition.se |
+
+## Moss
+
+Client draft for Moss Entreprenad AB, awaiting the customer's approval
+before it moves to their own domain. Source and deploy workflow live in
+[Tschiffer46/Moss](https://github.com/Tschiffer46/Moss); pushing to `main`
+there rsyncs `dist/` to `~/hosting/sites/client-moss/dist/`.
+
+Two things worth knowing before touching it:
+
+- The site is a client-side routed SPA, so it needs
+  `try_files $uri $uri/ /index.html`. That lives in
+  `~/hosting/sites/client-moss/nginx.conf`, deliberately **outside**
+  `dist/` because the deploy runs `rsync --delete` against that directory.
+  The file is version-controlled as `deploy/nginx.conf` in the Moss repo,
+  but it is **not** copied by the workflow — change it on the server and
+  run `docker restart moss`.
+- `robots.txt` currently carries `Disallow: /` while the site is a draft.
+  That is intentional and must be reverted at launch.
 
 ## Energi Dashboard
 
