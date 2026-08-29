@@ -75,6 +75,7 @@ jobs:
             sites_total: (.sites | length),
             backup_age_hours: .server.backups.latest_age_hours,
             backup_total_bytes: .server.backups.total_bytes,
+            backup_stubs: (.server.backups.stub_count // 0),
             apt_pending: .server.os_updates.pending,
             apt_security: .server.os_updates.security,
             reboot_required: .server.os_updates.reboot_required,
@@ -103,3 +104,12 @@ jobs:
             sleep $((2 ** i))
           done
           exit 1
+
+      # Runs last, after the snapshot is safely committed, so an alert never
+      # costs us the data point. Collecting metrics used to always succeed,
+      # which meant a site could return 502 and backups could be empty for
+      # weeks with every workflow still green and no email sent.
+      - name: Alert on critical risks
+        run: |
+          chmod +x scripts/check-risks.sh
+          bash scripts/check-risks.sh docs/data/latest.json

@@ -5,6 +5,7 @@
 set -uo pipefail
 
 LOG="/tmp/maintenance-$(date +%Y%m%d).log"
+HOSTING_DIR="/home/deploy/hosting"
 ERRORS=0
 
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG"; }
@@ -21,23 +22,62 @@ for img in nginx:alpine node:20-alpine postgres:16-alpine jc21/nginx-proxy-manag
   docker pull "$img" >> "$LOG" 2>&1 || { log "ERROR: Failed to pull $img"; ERRORS=$((ERRORS+1)); }
 done
 
+cd "$HOSTING_DIR" || { log "ERROR: $HOSTING_DIR not found"; exit 1; }
+
+# Services actually defined in docker-compose.yml right now.
+#
+# Everything below is checked against this list first. A service that was
+# decommissioned on the server but left behind in this script used to abort the
+# whole `docker compose pull` — that is how voxtera's removal silently stopped
+# stegvis and forfor from being updated for ten weeks. Now a stale name is
+# reported on its own line and the rest of the run continues.
+COMPOSE_SERVICES=$(docker compose config --services 2>/dev/null | sort)
+if [ -z "$COMPOSE_SERVICES" ]; then
+  log "ERROR: could not read services from $HOSTING_DIR/docker-compose.yml"
+  ERRORS=$((ERRORS+1))
+fi
+has_service() { printf '%s\n' "$COMPOSE_SERVICES" | grep -qx "$1"; }
+
 # 3. Recreate static site containers (picks up new nginx:alpine)
 log "=== Restarting static site containers ==="
-cd /home/deploy/hosting
-for svc in azprofil azp2b agiletransition hemsidor azstore schiffer seatower; do
-  docker compose up -d --force-recreate "$svc" >> "$LOG" 2>&1 || { log "ERROR: Failed to restart $svc"; ERRORS=$((ERRORS+1)); }
+for svc in azprofil azp2b agiletransition hemsidor ehandel azstore schiffer seatower client-akeobygg; do
+  if ! has_service "$svc"; then
+    log "SKIP: $svc is not a service in docker-compose.yml — remove it here if it is gone for good"
+    continue
+  fi
+  docker compose up -d --force-recreate "$svc" >> "$LOG" 2>&1 \
+    || { log "ERROR: Failed to restart $svc"; ERRORS=$((ERRORS+1)); }
 done
 
 # digitaltoberoende (euproof.eu) must NOT be recreated from a bare compose definition:
-# it requires nginx.conf + .htpasswd mounts (dev-phase basic auth) or the password
-# protection silently disappears. Always use the dedicated script.
+# it requires its nginx.conf mount or the dev-phase gate silently disappears. Always
+# use the dedicated script. The container was removed from this VPS in August 2026 —
+# euproof.eu is still answering, so it is served from somewhere else now. Skip the
+# redeploy unless the container is actually here, rather than failing the whole run.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"$SCRIPT_DIR/redeploy-digitaltoberoende.sh" >> "$LOG" 2>&1 || { log "ERROR: Failed to restart digitaltoberoende"; ERRORS=$((ERRORS+1)); }
+if docker ps -a --format '{{.Names}}' | grep -qx digitaltoberoende; then
+  if [ -x "$SCRIPT_DIR/redeploy-digitaltoberoende.sh" ]; then
+    "$SCRIPT_DIR/redeploy-digitaltoberoende.sh" >> "$LOG" 2>&1 \
+      || { log "ERROR: Failed to restart digitaltoberoende"; ERRORS=$((ERRORS+1)); }
+  else
+    log "ERROR: $SCRIPT_DIR/redeploy-digitaltoberoende.sh missing — the workflow must upload it alongside this script"
+    ERRORS=$((ERRORS+1))
+  fi
+else
+  log "SKIP: digitaltoberoende is not on this host (euproof.eu is served elsewhere)"
+fi
 
-# 4. Pull and restart GHCR app images
+# 4. Pull and restart GHCR app images, one service at a time so a single stale
+#    or decommissioned app cannot block updates for the others.
 log "=== Updating Docker apps ==="
-docker compose pull stegvis voxtera forfor >> "$LOG" 2>&1 || { log "ERROR: Failed to pull app images"; ERRORS=$((ERRORS+1)); }
-docker compose up -d stegvis voxtera forfor >> "$LOG" 2>&1 || { log "ERROR: Failed to restart apps"; ERRORS=$((ERRORS+1)); }
+for svc in stegvis forfor vadskavi; do
+  if ! has_service "$svc"; then
+    log "SKIP: $svc is not a service in docker-compose.yml — remove it here if it is gone for good"
+    continue
+  fi
+  docker compose pull "$svc" >> "$LOG" 2>&1 || { log "ERROR: Failed to pull $svc"; ERRORS=$((ERRORS+1)); }
+  docker compose up -d "$svc" >> "$LOG" 2>&1 || { log "ERROR: Failed to restart $svc"; ERRORS=$((ERRORS+1)); }
+done
 
 # 5. Recreate proxy manager if base image updated
 log "=== Updating Nginx Proxy Manager ==="
@@ -46,18 +86,33 @@ docker compose up -d --force-recreate nginx-proxy-manager >> "$LOG" 2>&1 || { lo
 # 6. Wait for services to stabilize
 sleep 10
 
-# 7. Quick health check after update
+# 7. Post-update health check.
+#    Expectations come from docker-compose.yml itself rather than a hand-kept
+#    list, so decommissioning a service updates this check automatically.
+#    Compare by SERVICE name, not container name — compose services may set
+#    container_name (nginx-proxy-manager runs as the container "proxy-manager"),
+#    so matching service names against `docker ps` output reports false failures.
 log "=== Post-update health check ==="
-CONTAINERS=$(docker ps --format '{{.Names}}' | sort)
-EXPECTED="agiletransition azp2b azprofil azstore digitaltoberoende forfor forfor-db hemsidor proxy-manager schiffer seatower stegvis voxtera voxtera-db"
-for name in $EXPECTED; do
-  if echo "$CONTAINERS" | grep -q "^${name}$"; then
+RUNNING_SERVICES=$(docker compose ps --services --filter "status=running" 2>/dev/null | sort)
+for name in $COMPOSE_SERVICES; do
+  if printf '%s\n' "$RUNNING_SERVICES" | grep -qx "$name"; then
     log "OK: $name is running"
   else
     log "ERROR: $name is NOT running"
     ERRORS=$((ERRORS+1))
   fi
 done
+
+# Containers running outside this compose project are informational, not
+# failures — this is how a manually-run container (or a leftover) becomes
+# visible instead of silent.
+COMPOSE_CONTAINERS=$(docker compose ps -a --format '{{.Name}}' 2>/dev/null | sort)
+if [ -n "$COMPOSE_CONTAINERS" ]; then
+  for name in $(docker ps --format '{{.Names}}' | sort); do
+    printf '%s\n' "$COMPOSE_CONTAINERS" | grep -qx "$name" \
+      || log "NOTE: $name is running but is not managed by docker-compose.yml"
+  done
+fi
 
 # 8. Prune old images
 log "=== Cleanup ==="

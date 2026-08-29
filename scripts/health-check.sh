@@ -1,31 +1,46 @@
 #!/bin/bash
+# Pass/fail health check for every publicly reachable site.
+# Exits non-zero on the first problem so the GitHub Actions run turns red and
+# GitHub emails the failure. The site list lives in scripts/sites.txt.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SITES_FILE="$SCRIPT_DIR/sites.txt"
+
+# euproof.eu is gated by a dev-phase secret-link cookie (non-sensitive dev value).
+# Without it the gate answers 401/403; with it the real site answers 200.
+EUPROOF_COOKIE="euproof_preview=0432885f1a"
 
 ERRORS=0
 
 echo "=== Site Health Check: $(date) ==="
 
-# Check all sites externally
-# Note: Cloudflare may return 403 for bot-like requests, which still confirms the site is reachable
-SITES=(
-  "https://schiffer.agiletransition.se"
-  "https://seatower.agiletransition.se"
-  "https://hemsidor.agiletransition.se"
-  "https://azprofil.agiletransition.se"
-  "https://padeltobusiness.se"
-  "https://agiletransition.se"
-  "https://azstore.agiletransition.se"
-  "https://stegvis.agiletransition.se"
-  "https://voxtera.agiletransition.se"
-  "https://forfor.agiletransition.se"
-  # energi is behind an NPM access list: 401 without credentials still
-  # confirms the proxy + container are up (counted OK by the <500 rule)
-  "https://energi.agiletransition.se"
-)
+if [ ! -r "$SITES_FILE" ]; then
+  echo "FAIL: cannot read site list at $SITES_FILE"
+  exit 1
+fi
 
+mapfile -t SITES < <(grep -vE '^\s*(#|$)' "$SITES_FILE")
+
+if [ "${#SITES[@]}" -eq 0 ]; then
+  echo "FAIL: site list $SITES_FILE is empty"
+  exit 1
+fi
+
+# Cloudflare may answer 403 to bot-like requests, which still confirms the site
+# is reachable — hence the <500 rule rather than a strict 200.
 for url in "${SITES[@]}"; do
+  host=${url#https://}
+  host=${host%%/*}
+
+  auth_args=()
+  if [ "$host" = "euproof.eu" ]; then
+    auth_args=(-H "Cookie: $EUPROOF_COOKIE")
+  fi
+
   STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 15 \
-    -A "Mozilla/5.0 HealthCheck" "$url" || echo "000")
+    -A "Mozilla/5.0 HealthCheck" "${auth_args[@]}" "$url" || echo "000")
+
   if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 500 ]; then
     echo "OK:   $url ($STATUS)"
   else
@@ -35,24 +50,23 @@ for url in "${SITES[@]}"; do
 done
 
 echo ""
-echo "--- euproof.eu dev-phase basic auth ---"
-# The site must be password-protected during development: 401 without credentials,
-# 200 with the dev credentials (user euproof, non-sensitive password). Anything else
-# means the protection is missing or rejecting valid logins.
+echo "--- euproof.eu dev-phase gate ---"
+# The site must stay password-protected while it is a draft. The gate is a
+# cookie now, not basic auth: 401/403 without the cookie proves it is enforced,
+# a 200 without it means the protection has silently disappeared.
 NOAUTH=$(curl -o /dev/null -s -w "%{http_code}" --max-time 15 \
   -A "Mozilla/5.0 HealthCheck" "https://euproof.eu/en/" || echo "000")
-WITHAUTH=$(curl -o /dev/null -s -w "%{http_code}" --max-time 15 \
-  -A "Mozilla/5.0 HealthCheck" -u 'euproof:EUDigSov2026' "https://euproof.eu/en/" || echo "000")
-if [ "$NOAUTH" = "401" ] && [ "$WITHAUTH" = "200" ]; then
-  echo "OK:   https://euproof.eu/en/ (401 without auth, 200 with auth)"
-elif [ "$NOAUTH" = "200" ]; then
-  echo "FAIL: https://euproof.eu/en/ is NOT password-protected (200 without auth)"
-  ERRORS=$((ERRORS+1))
-else
-  echo "FAIL: https://euproof.eu/en/ auth broken (no-auth=$NOAUTH with-auth=$WITHAUTH)"
-  ERRORS=$((ERRORS+1))
-fi
+case "$NOAUTH" in
+  401|403)
+    echo "OK:   euproof.eu gate is enforced ($NOAUTH without the preview cookie)" ;;
+  200)
+    echo "FAIL: euproof.eu is NOT protected (200 without the preview cookie)"
+    ERRORS=$((ERRORS+1)) ;;
+  *)
+    echo "FAIL: euproof.eu gate check inconclusive (no-cookie status $NOAUTH)"
+    ERRORS=$((ERRORS+1)) ;;
+esac
 
 echo ""
-echo "=== Results: $ERRORS failure(s) ==="
+echo "=== Results: $ERRORS failure(s) across ${#SITES[@]} site(s) ==="
 exit $ERRORS

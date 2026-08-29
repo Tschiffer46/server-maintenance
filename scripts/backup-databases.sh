@@ -5,27 +5,51 @@ BACKUP_DIR="/home/deploy/backups"
 COMPOSE_FILE="/home/deploy/hosting/docker-compose.yml"
 DATE=$(date +%Y%m%d_%H%M)
 RETAIN_DAYS=14
+MIN_DUMP_BYTES=100
 ERRORS=0
 
 mkdir -p "$BACKUP_DIR"
 
 echo "=== Database Backup: $DATE ==="
 
-# ForFor database
-echo "Backing up ForFor..."
-docker compose -f "$COMPOSE_FILE" exec -T forfor-db \
-  pg_dump -U forfor -d forfor 2>/dev/null | gzip > "$BACKUP_DIR/forfor-$DATE.sql.gz" || {
-  echo "ERROR: ForFor backup failed"
-  ERRORS=$((ERRORS+1))
-}
+# One entry per PostgreSQL container: label:container:user:database
+#
+# Keep this in sync with the *-db containers actually running on the server
+# (`docker ps`) — a database missing from this list is silently never backed up.
+# voxtera was removed here when it was decommissioned in August 2026.
+DATABASES=(
+  "forfor:forfor-db:forfor:forfor"
+  "stegvis:stegvis-db:stegvis:stegvis"
+  "vadskavi:vadskavi-db:vadskavi:vadskavi"
+  "schiffer:schiffer-db:schiffer:schiffer"
+)
 
-# Voxtera database
-echo "Backing up Voxtera..."
-docker compose -f "$COMPOSE_FILE" exec -T voxtera-db \
-  pg_dump -U voxtera -d voxtera 2>/dev/null | gzip > "$BACKUP_DIR/voxtera-$DATE.sql.gz" || {
-  echo "ERROR: Voxtera backup failed"
-  ERRORS=$((ERRORS+1))
-}
+for entry in "${DATABASES[@]}"; do
+  IFS=: read -r label container user db <<<"$entry"
+  target="$BACKUP_DIR/$label-$DATE.sql.gz"
+
+  echo "Backing up $label..."
+  if ! docker compose -f "$COMPOSE_FILE" exec -T "$container" \
+      pg_dump -U "$user" -d "$db" 2>/dev/null | gzip > "$target"; then
+    echo "ERROR: $label backup failed (container $container)"
+    # Remove the empty/partial file. A failed gzip still leaves a ~20-byte
+    # archive behind, and that stub is newer than the last good dump — it
+    # becomes the "latest backup" the dashboard reports, making a broken
+    # backup look fresh. Deleting it keeps the freshness signal honest.
+    rm -f "$target"
+    ERRORS=$((ERRORS+1))
+    continue
+  fi
+
+  SIZE=$(stat -c%s "$target" 2>/dev/null || stat -f%z "$target" 2>/dev/null || echo 0)
+  if [ "$SIZE" -lt "$MIN_DUMP_BYTES" ]; then
+    echo "ERROR: $label dump is suspiciously small (${SIZE} bytes) — discarding"
+    rm -f "$target"
+    ERRORS=$((ERRORS+1))
+  else
+    echo "OK: $(basename "$target") - $(numfmt --to=iec "$SIZE" 2>/dev/null || echo "${SIZE} bytes")"
+  fi
+done
 
 # Energi dashboard (SQLite) — does NOT run on this server. It runs on
 # Freja7, Thomas's home server, reached over Tailscale (see
@@ -50,23 +74,13 @@ if [ -n "$FREJA7_TAILSCALE_IP" ]; then
        "$FREJA7_USER@$FREJA7_TAILSCALE_IP:/tmp/energi-backup.db" "$BACKUP_DIR/energi-$DATE.db" \
     && gzip -f "$BACKUP_DIR/energi-$DATE.db"; then
     $SSH_ENERGI 'rm -f /tmp/energi-backup.db'
+    echo "OK: energi-$DATE.db.gz"
   else
     echo "ERROR: energi backup failed"
+    rm -f "$BACKUP_DIR/energi-$DATE.db" "$BACKUP_DIR/energi-$DATE.db.gz"
     ERRORS=$((ERRORS+1))
   fi
 fi
-
-# Verify backups are non-empty
-for f in "$BACKUP_DIR"/*-"$DATE".sql.gz "$BACKUP_DIR"/*-"$DATE".db.gz; do
-  [ -e "$f" ] || continue
-  SIZE=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null)
-  if [ "$SIZE" -lt 100 ]; then
-    echo "ERROR: Backup $f is suspiciously small (${SIZE} bytes)"
-    ERRORS=$((ERRORS+1))
-  else
-    echo "OK: $(basename "$f") - $(numfmt --to=iec "$SIZE" 2>/dev/null || echo "${SIZE} bytes")"
-  fi
-done
 
 # Rotate: delete backups older than 14 days
 DELETED=$(find "$BACKUP_DIR" \( -name "*.sql.gz" -o -name "*.db.gz" \) -mtime +$RETAIN_DAYS -delete -print | wc -l)
@@ -78,4 +92,5 @@ echo "Total backups on disk:"
 ls -lh "$BACKUP_DIR"/*.gz 2>/dev/null || echo "  (none)"
 du -sh "$BACKUP_DIR" 2>/dev/null
 
+echo "=== Complete. Errors: $ERRORS ==="
 exit $ERRORS

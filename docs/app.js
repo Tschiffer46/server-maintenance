@@ -145,9 +145,9 @@ function renderStatus() {
       <div><div class="k">free</div><div class="v">${fmtBytes(rootDisk?.avail)}</div></div></div>
     </div>
     <div class="card"><div class="title"><span class="name">Latest backup</span></div>
-      <div class="sub">${s.backups.latest_name || '—'}</div>
+      <div class="sub">${s.backups.latest_name || '—'}${s.backups.stub_count ? ` · ${s.backups.stub_count} empty` : ''}</div>
       <div class="metrics"><div><div class="k">age</div><div class="v">${fmtAge(s.backups.latest_age_hours)}</div></div>
-      <div><div class="k">total on disk</div><div class="v">${fmtBytes(s.backups.total_bytes)}</div></div></div>
+      <div><div class="k">valid dumps</div><div class="v">${s.backups.valid_count ?? s.backups.count ?? '—'}</div></div></div>
     </div>
     <div class="card"><div class="title"><span class="name">Databases</span></div>
       <div class="sub">${(s.databases || []).map(d => `${d.name}: ${fmtBytes(d.size)}`).join(' · ') || '—'}</div>
@@ -184,6 +184,14 @@ function computeRisks() {
     risks.push({ severity: 'bad', label: `Backup is ${fmtAge(ageH)} old`, desc: 'Daily backup workflow may be failing.' });
   } else if (ageH > 30) {
     risks.push({ severity: 'warn', label: `Backup is ${fmtAge(ageH)} old`, desc: 'Verify the daily backup ran today.' });
+  }
+
+  // A failing pg_dump leaves an empty ~20-byte archive behind. Those stubs used
+  // to be counted as the newest backup, so a broken backup looked fresh.
+  const stubs = s.backups.stub_count || 0;
+  if (stubs > 0) {
+    risks.push({ severity: 'bad', label: `${stubs} empty backup file${stubs>1?'s':''}`,
+      desc: 'A pg_dump is failing — that database has no restorable backup.' });
   }
 
   for (const c of (s.containers || [])) {

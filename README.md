@@ -6,14 +6,34 @@ Automated maintenance for the Hetzner VPS (89.167.90.112) hosting all agiletrans
 
 | Workflow | Schedule | What it does |
 |----------|----------|-------------|
-| **Daily Backup** | 02:00 CET daily | pg_dump ForFor + Voxtera databases, 14-day rotation |
-| **Health Check** | Manual only | HTTP checks all 10 sites + server disk/memory/containers |
+| **Daily Backup** | 02:00 CET daily | `pg_dump` every database in `scripts/backup-databases.sh`, 14-day rotation |
+| **Health Check** | Manual only | HTTP checks every site in `scripts/sites.txt` + server disk/memory/containers |
 | **Weekly Update** | Sunday 03:00 CET | OS updates, Docker image pulls, container restarts |
-| **Collect Dashboard Metrics** | Every 6 hours | Snapshots usage/risk/status JSON into `docs/data/` for the dashboard |
+| **Collect Dashboard Metrics** | Every 6 hours | Snapshots usage/risk/status JSON into `docs/data/`, then alerts on critical risks |
 
 All workflows can also be triggered manually from GitHub Actions.
 
-GitHub sends email notifications automatically on failure.
+### What actually alerts you
+
+GitHub emails the repo owner when a **scheduled** workflow fails. That only
+helps if a workflow fails when something is wrong, so:
+
+- **Collect Dashboard Metrics** is the standing site/server alert. After it
+  commits the snapshot it runs `scripts/check-risks.sh`, which fails the run on
+  anything operationally broken — a site down, a dev-phase gate that stopped
+  being enforced, no valid backup or one older than 48 h, an empty backup stub,
+  a stopped or unhealthy container, a disk over 90 %, a TLS certificate under
+  14 days. Worst case you hear about it within six hours.
+- Standing posture items (UFW disabled, pending OS updates, reboot required)
+  are printed in the run summary but deliberately do **not** fail the run.
+  They need a maintenance decision, not an incident response, and a workflow
+  that is permanently red is a workflow nobody reads.
+- **Health Check** stays manual — it is the on-demand deep check, and the
+  metrics gate already covers the same ground on a schedule.
+
+> Collecting metrics never used to fail, which is how voxtera served 502 for
+> twelve days and the nightly backup wrote empty files for five weeks while
+> every workflow stayed green.
 
 ## Dashboard
 
@@ -58,6 +78,11 @@ This sets up:
 - Unattended upgrades (security **and** non-security, auto-reboot at 04:00 only when an update requires it)
 - Docker log rotation
 
+> **The firewall is currently off.** Recent snapshots report
+> `ufw_enabled: false` with 0 rules, so port 81 (NPM admin) may be reachable
+> from the internet rather than only through the SSH tunnel described below.
+> Re-running this script is the fix; the metrics run reports it every six hours.
+
 ### After Hardening: Access NPM Admin
 
 Port 81 is blocked by the firewall. Use an SSH tunnel:
@@ -78,19 +103,43 @@ These must be configured in this repo's settings:
 
 ## Hosted Sites
 
-| Site | Type | URL |
-|------|------|-----|
-| azprofil | Static | azprofil.agiletransition.se |
-| azp2b | Static | padeltobusiness.se (was azp2b.agiletransition.se, now 301) |
-| agiletransition | Static | agiletransition.agiletransition.se |
-| hemsidor | Static | hemsidor.agiletransition.se |
-| azstore | Static | azstore.agiletransition.se |
-| schiffer | Static | schiffer.agiletransition.se |
-| seatower | Static | seatower.agiletransition.se |
-| stegvis | Docker App | stegvis.agiletransition.se |
-| voxtera | Docker App + PostgreSQL | voxtera.agiletransition.se |
-| forfor | Docker App + PostgreSQL | forfor.agiletransition.se |
-| energi | Home server (Freja7) + Tailscale | energi.agiletransition.se |
+`Monitored` means the URL is probed by `scripts/sites.txt`, the single list read
+by both `health-check.sh` and `check-sites-json.sh`. Add a new public site there
+once and both pick it up.
+
+| Site | Type | URL | Monitored |
+|------|------|-----|-----------|
+| azprofil | Static | azprofil.agiletransition.se | yes |
+| azp2b | Static | padeltobusiness.se (was azp2b.agiletransition.se, now 301) | yes |
+| agiletransition | Static | agiletransition.se | yes |
+| hemsidor | Static | hemsidor.agiletransition.se | yes |
+| azstore | Static | azstore.agiletransition.se | yes |
+| schiffer | Static + PostgreSQL | schiffer.agiletransition.se | yes |
+| seatower | Static | seatower.agiletransition.se | yes |
+| stegvis | Docker App + PostgreSQL | stegvis.agiletransition.se | yes |
+| forfor | Docker App + PostgreSQL | forfor.agiletransition.se | yes |
+| euproof | Static, dev-phase cookie gate | euproof.eu | yes |
+| energi | Home server (Freja7) + Tailscale | energi.agiletransition.se | yes |
+| ehandel | Static | — internal only | no, by design |
+| vadskavi | Docker App + PostgreSQL | — internal only | no, by design |
+| client-akeobygg | Static | — internal only | no, by design |
+
+The three internal-only containers run on the VPS but are not reachable from the
+public internet, so probing them would produce a permanently red check. They are
+listed here so they are not mistaken for a monitoring gap — and they *are*
+covered indirectly: the metrics collector alerts if any container stops or turns
+unhealthy, and `vadskavi`'s database is backed up like the rest.
+
+**voxtera was decommissioned in August 2026** and removed from the site list,
+the backup list and the database-size collector. Its container disappeared from
+the server on 17 August; the last restorable dump was 24 July and 14-day
+rotation has since deleted it.
+
+**euproof.eu / digitaltoberoende:** the `digitaltoberoende` container is no
+longer on this VPS, yet euproof.eu still answers with a valid certificate — so
+it is served from somewhere else now. `update-server.sh` skips its redeploy when
+the container is absent instead of failing the whole weekly run. Worth
+confirming where it is actually hosted.
 
 ## Energi Dashboard
 

@@ -88,27 +88,47 @@ if command -v docker >/dev/null 2>&1; then
 fi
 
 # Database sizes
+# Keep this list in sync with DATABASES in scripts/backup-databases.sh:
+# label:container:user:database. voxtera was dropped when it was decommissioned.
 DB_SIZES_JSON='[]'
 if command -v docker >/dev/null 2>&1; then
-  FORFOR_SIZE=$(docker exec forfor-db psql -U forfor -d forfor -tAc "SELECT pg_database_size('forfor')" 2>/dev/null | tr -d ' ' || echo 0)
-  VOXTERA_SIZE=$(docker exec voxtera-db psql -U voxtera -d voxtera -tAc "SELECT pg_database_size('voxtera')" 2>/dev/null | tr -d ' ' || echo 0)
-  DB_SIZES_JSON=$(jq -n \
-    --argjson f "${FORFOR_SIZE:-0}" \
-    --argjson v "${VOXTERA_SIZE:-0}" \
-    '[{"name":"forfor","size":$f},{"name":"voxtera","size":$v}]')
+  DB_ENTRIES=(
+    "forfor:forfor-db:forfor:forfor"
+    "stegvis:stegvis-db:stegvis:stegvis"
+    "vadskavi:vadskavi-db:vadskavi:vadskavi"
+    "schiffer:schiffer-db:schiffer:schiffer"
+  )
+  DB_SIZES_JSON=$(for entry in "${DB_ENTRIES[@]}"; do
+    IFS=: read -r label container user db <<<"$entry"
+    size=$(docker exec "$container" psql -U "$user" -d "$db" -tAc \
+      "SELECT pg_database_size('$db')" 2>/dev/null | tr -d ' ')
+    jq -n --arg n "$label" --argjson s "${size:-0}" '{name:$n, size:$s}'
+  done | jq -s '.')
 fi
 
 # Backups
+#
+# A failed pg_dump used to leave a ~20-byte gzip stub behind, and because that
+# stub was the newest file it became "latest backup" — so a backup that had been
+# broken for weeks still showed as a few hours old. backup-databases.sh now
+# deletes those stubs, and this collector additionally ignores anything under
+# MIN_DUMP_BYTES so the freshness signal reflects real, restorable dumps only.
 BACKUP_DIR=/home/deploy/backups
+MIN_DUMP_BYTES=100
 BACKUP_TOTAL_BYTES=0
 BACKUP_COUNT=0
+BACKUP_VALID_COUNT=0
+BACKUP_STUB_COUNT=0
 LATEST_BACKUP_AGE_HOURS=null
 LATEST_BACKUP_NAME=null
 LATEST_BACKUP_SIZE=0
 if [ -d "$BACKUP_DIR" ]; then
   BACKUP_TOTAL_BYTES=$(du -sb "$BACKUP_DIR" 2>/dev/null | awk '{print $1}')
-  BACKUP_COUNT=$(find "$BACKUP_DIR" -name '*.sql.gz' 2>/dev/null | wc -l | tr -d ' ')
-  LATEST=$(ls -t "$BACKUP_DIR"/*.sql.gz 2>/dev/null | head -1)
+  BACKUP_COUNT=$(find "$BACKUP_DIR" -type f \( -name '*.sql.gz' -o -name '*.db.gz' \) 2>/dev/null | wc -l | tr -d ' ')
+  BACKUP_VALID_COUNT=$(find "$BACKUP_DIR" -type f \( -name '*.sql.gz' -o -name '*.db.gz' \) -size +${MIN_DUMP_BYTES}c 2>/dev/null | wc -l | tr -d ' ')
+  BACKUP_STUB_COUNT=$(( BACKUP_COUNT - BACKUP_VALID_COUNT ))
+  LATEST=$(find "$BACKUP_DIR" -type f \( -name '*.sql.gz' -o -name '*.db.gz' \) -size +${MIN_DUMP_BYTES}c -printf '%T@ %p\n' 2>/dev/null \
+    | sort -rn | head -1 | cut -d' ' -f2-)
   if [ -n "$LATEST" ]; then
     LATEST_BACKUP_AGE_HOURS=$(( ($(date +%s) - $(stat -c%Y "$LATEST")) / 3600 ))
     LATEST_BACKUP_NAME="\"$(basename "$LATEST")\""
@@ -157,6 +177,8 @@ jq -n \
   --argjson db_sizes "$DB_SIZES_JSON" \
   --argjson backup_total "${BACKUP_TOTAL_BYTES:-0}" \
   --argjson backup_count "${BACKUP_COUNT:-0}" \
+  --argjson backup_valid "${BACKUP_VALID_COUNT:-0}" \
+  --argjson backup_stubs "${BACKUP_STUB_COUNT:-0}" \
   --argjson backup_age "${LATEST_BACKUP_AGE_HOURS}" \
   --argjson backup_name "${LATEST_BACKUP_NAME}" \
   --argjson backup_size "${LATEST_BACKUP_SIZE:-0}" \
@@ -177,5 +199,6 @@ jq -n \
     images: $images,
     databases: $db_sizes,
     backups: {total_bytes: $backup_total, count: $backup_count,
+              valid_count: $backup_valid, stub_count: $backup_stubs,
               latest_age_hours: $backup_age, latest_name: $backup_name, latest_size: $backup_size}
   }'
