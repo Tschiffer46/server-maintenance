@@ -1,0 +1,34 @@
+# Externally probed sites — the single source of truth.
+#
+# Read by BOTH scripts/health-check.sh (pass/fail alerting) and
+# scripts/check-sites-json.sh (dashboard metrics). They used to keep two
+# hand-maintained copies of this list, which silently drifted apart; keep it
+# in one place so a new site is added once.
+#
+# One URL per line. Blank lines and #-comments are ignored.
+#
+# Only list sites that are reachable from the public internet. Containers that
+# are deliberately internal-only (ehandel, vadskavi, client-akeobygg) belong in
+# README.md's hosted-sites table, not here — probing them would produce a
+# permanently red check.
+
+https://schiffer.agiletransition.se
+https://seatower.agiletransition.se
+https://hemsidor.agiletransition.se
+https://azprofil.agiletransition.se
+https://padeltobusiness.se
+https://agiletransition.se
+https://azstore.agiletransition.se
+https://stegvis.agiletransition.se
+https://forfor.agiletransition.se
+
+# euproof.eu is behind a dev-phase secret-link cookie gate (migrated away from
+# HTTP basic auth — see digitaltoberoende/CLAUDE.md). Both scripts special-case
+# this host to probe it with the preview cookie and to assert the gate is still
+# enforced without it.
+https://euproof.eu/en/
+
+# energi runs on Freja7 (home server) and is proxied here behind an NPM access
+# list: 401 without credentials still proves the proxy + backend are up, and
+# counts as OK under the 2xx-4xx rule.
+https://energi.agiletransition.se

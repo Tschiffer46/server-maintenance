@@ -3,22 +3,19 @@
 # Emits a single JSON object to stdout. Runs from the GitHub Actions runner (no SSH needed).
 set -uo pipefail
 
-SITES=(
-  "https://schiffer.agiletransition.se"
-  "https://seatower.agiletransition.se"
-  "https://hemsidor.agiletransition.se"
-  "https://azprofil.agiletransition.se"
-  "https://padeltobusiness.se"
-  "https://agiletransition.se"
-  "https://azstore.agiletransition.se"
-  "https://stegvis.agiletransition.se"
-  "https://voxtera.agiletransition.se"
-  "https://forfor.agiletransition.se"
-  "https://euproof.eu/en/"
-  # energi is behind an NPM access list: 401 without credentials still
-  # counts as "ok" below (2xx-4xx), same convention as health-check.sh
-  "https://energi.agiletransition.se"
-)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SITES_FILE="$SCRIPT_DIR/sites.txt"
+
+# The site list is shared with scripts/health-check.sh — see scripts/sites.txt.
+if [ ! -r "$SITES_FILE" ]; then
+  echo "cannot read site list at $SITES_FILE" >&2
+  exit 2
+fi
+mapfile -t SITES < <(grep -vE '^\s*(#|$)' "$SITES_FILE")
+if [ "${#SITES[@]}" -eq 0 ]; then
+  echo "site list $SITES_FILE is empty" >&2
+  exit 2
+fi
 
 # euproof.eu is behind a dev-phase secret-link COOKIE gate (it was migrated away
 # from HTTP basic auth — see digitaltoberoende/CLAUDE.md). Without the cookie the
