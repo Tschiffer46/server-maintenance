@@ -12,7 +12,7 @@ SITES=(
   "https://seatower.agiletransition.se"
   "https://hemsidor.agiletransition.se"
   "https://azprofil.agiletransition.se"
-  "https://azp2b.agiletransition.se"
+  "https://padeltobusiness.se"
   "https://agiletransition.se"
   "https://azstore.agiletransition.se"
   "https://stegvis.agiletransition.se"

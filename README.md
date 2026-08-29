@@ -81,7 +81,7 @@ These must be configured in this repo's settings:
 | Site | Type | URL |
 |------|------|-----|
 | azprofil | Static | azprofil.agiletransition.se |
-| azp2b | Static | azp2b.agiletransition.se |
+| azp2b | Static | padeltobusiness.se (was azp2b.agiletransition.se, now 301) |
 | agiletransition | Static | agiletransition.agiletransition.se |
 | hemsidor | Static | hemsidor.agiletransition.se |
 | azstore | Static | azstore.agiletransition.se |
