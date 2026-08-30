@@ -93,6 +93,31 @@ ssh -L 8081:localhost:81 deploy@89.167.90.112
 
 Then open http://localhost:8081 in your browser.
 
+## Server-side prerequisites for the weekly update
+
+Two things the weekly update needs that live on the server, not in this repo.
+Both fail loudly in the run log with the exact command to fix them, but they
+need a one-time SSH session:
+
+**Passwordless sudo for apt.** The update runs over SSH with no TTY, so `sudo`
+cannot prompt. Without this every apt step fails with *"a terminal is required
+to read the password"* and no OS updates are applied by this workflow —
+unattended-upgrades still handles security patches, but the weekly full upgrade
+silently does nothing:
+
+```bash
+echo 'deploy ALL=(ALL) NOPASSWD: /usr/bin/apt-get' | sudo tee /etc/sudoers.d/90-apt-maintenance
+sudo chmod 0440 /etc/sudoers.d/90-apt-maintenance && sudo visudo -c
+```
+
+**Registry credentials for ghcr.io.** Pulling the app images (`stegvis`,
+`forfor`, `vadskavi`) needs a login, or the pull fails with `denied` and the
+containers stay on their current image:
+
+```bash
+docker login ghcr.io -u <github-user>   # PAT with read:packages
+```
+
 ## Required GitHub Secrets
 
 These must be configured in this repo's settings:

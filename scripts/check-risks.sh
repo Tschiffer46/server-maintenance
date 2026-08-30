@@ -43,7 +43,7 @@ CRITICAL=$(jq -r --argjson maxage "$BACKUP_MAX_AGE_HOURS" \
     (.server.backups | select(.latest_age_hours != null and .latest_age_hours > $maxage)
       | "Newest valid backup is \(.latest_age_hours) h old"),
     (.server.backups | select((.stub_count // 0) > 0)
-      | "\(.stub_count) empty backup stub(s) on disk — a pg_dump is failing"),
+      | "\(.stub_count) empty backup file(s) on disk — a dump produced nothing restorable"),
     (.server.containers[]? | select(.state != "running")
       | "Container \(.name) is \(.state)"),
     (.server.containers[]? | select(.health == "unhealthy")

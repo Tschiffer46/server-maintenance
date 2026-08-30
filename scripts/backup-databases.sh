@@ -82,6 +82,20 @@ if [ -n "$FREJA7_TAILSCALE_IP" ]; then
   fi
 fi
 
+# Sweep stubs left by earlier failed runs.
+#
+# Before this script deleted its own failed dumps, a broken pg_dump still left a
+# ~20-byte gzip archive behind — voxtera wrote one every night from 2026-07-25
+# until it was decommissioned. Those files hold nothing restorable, and because
+# they were the newest file in the directory they were reported as the latest
+# backup. Rotation would eventually age them out, but not before the freshness
+# alert had fired every six hours for two weeks, so clear them here instead.
+SWEPT=$(find "$BACKUP_DIR" -type f \( -name '*.sql.gz' -o -name '*.db.gz' \) \
+  -size -${MIN_DUMP_BYTES}c -print -delete 2>/dev/null | wc -l)
+if [ "$SWEPT" -gt 0 ]; then
+  echo "Swept: $SWEPT empty backup stub(s) left by earlier failed runs"
+fi
+
 # Rotate: delete backups older than 14 days
 DELETED=$(find "$BACKUP_DIR" \( -name "*.sql.gz" -o -name "*.db.gz" \) -mtime +$RETAIN_DAYS -delete -print | wc -l)
 echo "Rotated: $DELETED old backup(s) removed"
