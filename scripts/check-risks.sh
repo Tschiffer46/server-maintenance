@@ -44,6 +44,8 @@ CRITICAL=$(jq -r --argjson maxage "$BACKUP_MAX_AGE_HOURS" \
       | "Newest valid backup is \(.latest_age_hours) h old"),
     (.server.backups | select((.stub_count // 0) > 0)
       | "\(.stub_count) empty backup file(s) on disk — a dump produced nothing restorable"),
+    (.server.container_census? | select(. != null and .seen > .reported)
+      | "Container census mismatch: docker listed \(.seen), snapshot has \(.reported) — inspect failed for \(.seen - .reported)"),
     (.server.containers[]? | select(.state != "running")
       | "Container \(.name) is \(.state)"),
     (.server.containers[]? | select(.health == "unhealthy")

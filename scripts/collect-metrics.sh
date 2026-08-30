@@ -64,11 +64,36 @@ CONTAINERS_JSON='[]'
 IMAGES_JSON='[]'
 if command -v docker >/dev/null 2>&1; then
   IDS=$(docker ps -a --format '{{.ID}}')
+  CONTAINERS_SEEN=$(printf '%s\n' "$IDS" | grep -c . || true)
   if [ -n "$IDS" ]; then
+    # Read the whole inspect payload as JSON and pick the fields with jq, rather
+    # than formatting them in a Go template.
+    #
+    # The template used to do `{{if .State.Health}}...{{else}}none{{end}}`, which
+    # looks safe but is not: for a container started without a healthcheck the
+    # State map has no "Health" key at all, and Go templates fail on a missing
+    # key before the `if` is ever evaluated. `docker inspect` then exits with
+    #   template parsing error: ... map has no entry for key "Health"
+    # printing nothing to stdout, so that container silently vanished from the
+    # snapshot. moss and digitaltoberoende — the only two started with plain
+    # `docker run` rather than compose — were invisible to the dashboard and to
+    # the container-down alert for months because of this.
+    #
+    # jq's `//` handles the absent key correctly. Only the eight fields below
+    # are emitted; the rest of the payload (which includes container env, and
+    # so database passwords) is consumed by jq and never reaches stdout.
     CONTAINERS_JSON=$(printf '%s\n' "$IDS" | while read -r id; do
-      docker inspect "$id" --format \
-        '{"id":"{{.Id}}","name":"{{.Name}}","image":"{{.Config.Image}}","state":"{{.State.Status}}","health":"{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}","started":"{{.State.StartedAt}}","restart_count":{{.RestartCount}},"exit_code":{{.State.ExitCode}}}'
-    done | jq -s 'map(.name |= ltrimstr("/"))')
+      docker inspect "$id" --format '{{json .}}' 2>/dev/null | jq -c '{
+        id: .Id,
+        name: (.Name | ltrimstr("/")),
+        image: .Config.Image,
+        state: .State.Status,
+        health: (.State.Health.Status // "none"),
+        started: .State.StartedAt,
+        restart_count: .RestartCount,
+        exit_code: .State.ExitCode
+      }'
+    done | jq -s '.')
 
     STATS_RAW=$(docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemPerc}}' 2>/dev/null || true)
     STATS_JSON=$(printf '%s\n' "$STATS_RAW" | awk -F'|' 'NF==3 {
@@ -81,6 +106,10 @@ if command -v docker >/dev/null 2>&1; then
       ($stats | map({(.name): {cpu_pct, mem_pct}}) | add) as $m
       | map(. + ($m[.name] // {cpu_pct:0, mem_pct:0}))')
   fi
+  # Docker listed CONTAINERS_SEEN ids; this many made it into the snapshot. A
+  # mismatch means inspect failed for something and the dashboard is showing an
+  # incomplete picture — surfaced rather than swallowed this time.
+  CONTAINERS_REPORTED=$(printf '%s' "$CONTAINERS_JSON" | jq 'length')
 
   IMAGES_JSON=$(docker image ls --format '{{.Repository}}:{{.Tag}}|{{.CreatedAt}}|{{.Size}}|{{.ID}}' 2>/dev/null \
     | awk -F'|' 'NF==4 {printf "{\"image\":\"%s\",\"created\":\"%s\",\"size\":\"%s\",\"id\":\"%s\"}\n",$1,$2,$3,$4}' \
@@ -173,6 +202,8 @@ jq -n \
   --argjson ufw_enabled "$UFW_ENABLED" \
   --argjson ufw_rules "${UFW_RULES_COUNT:-0}" \
   --argjson containers "$CONTAINERS_JSON" \
+  --argjson containers_seen "${CONTAINERS_SEEN:-0}" \
+  --argjson containers_reported "${CONTAINERS_REPORTED:-0}" \
   --argjson images "$IMAGES_JSON" \
   --argjson db_sizes "$DB_SIZES_JSON" \
   --argjson backup_total "${BACKUP_TOTAL_BYTES:-0}" \
@@ -196,6 +227,7 @@ jq -n \
                ufw_enabled: $ufw_enabled, ufw_rules: $ufw_rules,
                ssh_failed_logins_24h: $ssh_failed_24h},
     containers: $containers,
+    container_census: {seen: $containers_seen, reported: $containers_reported},
     images: $images,
     databases: $db_sizes,
     backups: {total_bytes: $backup_total, count: $backup_count,

@@ -193,12 +193,27 @@ done
 nano ~/hosting/docker-compose.yml    # drop the digitaltoberoende service
 ```
 
-While you are on the VPS, this settles the open question about why the metrics
-collector never lists `moss` or `digitaltoberoende`:
+### Why two containers were invisible to the dashboard
 
-```bash
-docker ps -a --format '{{.Names}}'
+`collect-metrics.sh` built each container's JSON with a Go template containing
+`{{if .State.Health}}...{{else}}none{{end}}`. That guard does not work for a
+container started **without a healthcheck**: its `State` map has no `Health`
+key at all, and Go templates fail on a missing key before the `if` is
+evaluated. `docker inspect` exited with
+
 ```
+template parsing error: ... executing "" at <.State.Health>: map has no entry for key "Health"
+```
+
+printing nothing to stdout, so the container was silently dropped from the
+snapshot. `moss` and `digitaltoberoende` were the only two started with plain
+`docker run` rather than compose, so they were the only two affected — and they
+were invisible to both the dashboard and the container-down alert for months.
+
+The collector now reads `{{json .}}` and selects fields with jq, where `//`
+handles the absent key. It also records a `container_census` of ids seen versus
+entries reported, and the risk gate fails on a mismatch, so a future silent
+drop shows up immediately instead of going unnoticed.
 
 ## Energi Dashboard
 
