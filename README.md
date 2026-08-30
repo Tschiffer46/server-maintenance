@@ -97,7 +97,14 @@ Then open http://localhost:8081 in your browser.
 
 Two things the weekly update needs that live on the server, not in this repo.
 Both fail loudly in the run log with the exact command to fix them, but they
-need a one-time SSH session:
+need a one-time SSH session.
+
+> Run these on the **Hetzner VPS**, not on Freja7. This repo touches two
+> machines and only one of them hosts the sites:
+>
+> ```bash
+> ssh deploy@89.167.90.112     # prompt should read deploy@web-hosting-prod
+> ```
 
 **Passwordless sudo for apt.** The update runs over SSH with no TTY, so `sudo`
 cannot prompt. Without this every apt step fails with *"a terminal is required
@@ -115,7 +122,7 @@ sudo chmod 0440 /etc/sudoers.d/90-apt-maintenance && sudo visudo -c
 containers stay on their current image:
 
 ```bash
-docker login ghcr.io -u <github-user>   # PAT with read:packages
+docker login ghcr.io -u Tschiffer46   # paste a PAT with read:packages as the password
 ```
 
 ## Required GitHub Secrets
@@ -169,15 +176,28 @@ record of the mounts the site needs if it ever moves back here.
 
 ### Server-side cleanup still pending
 
-The weekly run reports these; they need one SSH session:
+The weekly run reports these. Again: **on the VPS**, not on Freja7.
 
 ```bash
-# Two leftover containers that should not be running
-docker stop moss digitaltoberoende && docker rm moss digitaltoberoende
+ssh deploy@89.167.90.112
+
+# Two leftover containers that should not be running. Handled one at a time so
+# that a container which is already gone does not stop the other from being
+# removed, and so the output says which of the two actually existed.
+for c in moss digitaltoberoende; do
+  docker rm -f "$c" 2>/dev/null && echo "removed $c" || echo "$c not present"
+done
 
 # digitaltoberoende is still a service in docker-compose.yml, so the
-# post-update check will report it missing until the definition is removed
-$EDITOR ~/hosting/docker-compose.yml    # drop the digitaltoberoende service
+# post-update check reports it missing until the definition is removed
+nano ~/hosting/docker-compose.yml    # drop the digitaltoberoende service
+```
+
+While you are on the VPS, this settles the open question about why the metrics
+collector never lists `moss` or `digitaltoberoende`:
+
+```bash
+docker ps -a --format '{{.Names}}'
 ```
 
 ## Energi Dashboard
