@@ -93,6 +93,38 @@ ssh -L 8081:localhost:81 deploy@89.167.90.112
 
 Then open http://localhost:8081 in your browser.
 
+## Server-side prerequisites for the weekly update
+
+Two things the weekly update needs that live on the server, not in this repo.
+Both fail loudly in the run log with the exact command to fix them, but they
+need a one-time SSH session.
+
+> Run these on the **Hetzner VPS**, not on Freja7. This repo touches two
+> machines and only one of them hosts the sites:
+>
+> ```bash
+> ssh deploy@89.167.90.112     # prompt should read deploy@web-hosting-prod
+> ```
+
+**Passwordless sudo for apt.** The update runs over SSH with no TTY, so `sudo`
+cannot prompt. Without this every apt step fails with *"a terminal is required
+to read the password"* and no OS updates are applied by this workflow —
+unattended-upgrades still handles security patches, but the weekly full upgrade
+silently does nothing:
+
+```bash
+echo 'deploy ALL=(ALL) NOPASSWD: /usr/bin/apt-get' | sudo tee /etc/sudoers.d/90-apt-maintenance
+sudo chmod 0440 /etc/sudoers.d/90-apt-maintenance && sudo visudo -c
+```
+
+**Registry credentials for ghcr.io.** Pulling the app images (`stegvis`,
+`forfor`, `vadskavi`) needs a login, or the pull fails with `denied` and the
+containers stay on their current image:
+
+```bash
+docker login ghcr.io -u Tschiffer46   # paste a PAT with read:packages as the password
+```
+
 ## Required GitHub Secrets
 
 These must be configured in this repo's settings:
@@ -135,11 +167,38 @@ the backup list and the database-size collector. Its container disappeared from
 the server on 17 August; the last restorable dump was 24 July and 14-day
 rotation has since deleted it.
 
-**euproof.eu / digitaltoberoende:** the `digitaltoberoende` container is no
-longer on this VPS, yet euproof.eu still answers with a valid certificate — so
-it is served from somewhere else now. `update-server.sh` skips its redeploy when
-the container is absent instead of failing the whole weekly run. Worth
-confirming where it is actually hosted.
+**euproof.eu is no longer hosted on this VPS.** It still answers with a valid
+certificate and an enforced dev-phase gate, so it stays in `scripts/sites.txt`
+and is monitored — it simply serves from somewhere else now. The leftover
+`digitaltoberoende` container is being removed; the weekly update no longer
+recreates it, and `scripts/redeploy-digitaltoberoende.sh` is kept only as a
+record of the mounts the site needs if it ever moves back here.
+
+### Server-side cleanup still pending
+
+The weekly run reports these. Again: **on the VPS**, not on Freja7.
+
+```bash
+ssh deploy@89.167.90.112
+
+# Two leftover containers that should not be running. Handled one at a time so
+# that a container which is already gone does not stop the other from being
+# removed, and so the output says which of the two actually existed.
+for c in moss digitaltoberoende; do
+  docker rm -f "$c" 2>/dev/null && echo "removed $c" || echo "$c not present"
+done
+
+# digitaltoberoende is still a service in docker-compose.yml, so the
+# post-update check reports it missing until the definition is removed
+nano ~/hosting/docker-compose.yml    # drop the digitaltoberoende service
+```
+
+While you are on the VPS, this settles the open question about why the metrics
+collector never lists `moss` or `digitaltoberoende`:
+
+```bash
+docker ps -a --format '{{.Names}}'
+```
 
 ## Energi Dashboard
 
