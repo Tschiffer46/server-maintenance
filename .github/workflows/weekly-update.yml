@@ -22,8 +22,13 @@ jobs:
       - name: Upload and run update script
         run: |
           set -eo pipefail   # without this the `| tee` below hides a failing/aborted SSH run (false green)
-          scp -i ~/.ssh/key scripts/update-server.sh \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/update-server.sh
+          # update-server.sh runs redeploy-digitaltoberoende.sh from its own
+          # directory, so both must be uploaded.
+          scp -i ~/.ssh/key scripts/update-server.sh scripts/redeploy-digitaltoberoende.sh \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/
+          ssh -i ~/.ssh/key \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            'chmod +x /tmp/redeploy-digitaltoberoende.sh'
           ssh -i ~/.ssh/key \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
             'chmod +x /tmp/update-server.sh && bash /tmp/update-server.sh' \

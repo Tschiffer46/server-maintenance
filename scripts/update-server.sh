@@ -64,16 +64,24 @@ for svc in azprofil azp2b agiletransition hemsidor ehandel azstore schiffer seat
     || { log "ERROR: Failed to restart $svc"; ERRORS=$((ERRORS+1)); }
 done
 
-# digitaltoberoende (euproof.eu) is NOT hosted on this VPS any more, and its
-# leftover container is being removed. This step used to call
-# redeploy-digitaltoberoende.sh whenever a container by that name existed,
-# which meant the weekly run kept recreating a container that should not be
-# here at all. euproof.eu is still probed from scripts/sites.txt — it just
-# answers from somewhere else now.
+# digitaltoberoende (euproof.eu) IS hosted on this VPS, and must NOT be
+# recreated from a bare compose definition: it needs the nginx.conf mount, or
+# the dev-phase gate silently disappears. Always use the dedicated script.
 #
-# scripts/redeploy-digitaltoberoende.sh is kept for reference (it records the
-# exact mounts the site needs) but is no longer run automatically. If euproof
-# ever moves back onto this VPS, run it by hand and restore this step.
+# This runs unconditionally. It was briefly made conditional on the container
+# already existing, on the mistaken belief that the site had moved off this
+# host — the belief came from snapshots that were silently dropping this exact
+# container (it has no healthcheck; see collect-metrics.sh). Running it
+# unconditionally also restores the site if the container has gone missing,
+# which is the case this needs to handle.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/redeploy-digitaltoberoende.sh" ]; then
+  bash "$SCRIPT_DIR/redeploy-digitaltoberoende.sh" >> "$LOG" 2>&1 \
+    || { log "ERROR: Failed to restart digitaltoberoende (euproof.eu)"; ERRORS=$((ERRORS+1)); }
+else
+  log "ERROR: $SCRIPT_DIR/redeploy-digitaltoberoende.sh missing — the workflow must upload it alongside this script"
+  ERRORS=$((ERRORS+1))
+fi
 
 # 4. Pull and restart GHCR app images, one service at a time so a single stale
 #    or decommissioned app cannot block updates for the others.
