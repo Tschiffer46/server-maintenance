@@ -167,31 +167,42 @@ the backup list and the database-size collector. Its container disappeared from
 the server on 17 August; the last restorable dump was 24 July and 14-day
 rotation has since deleted it.
 
-**euproof.eu is no longer hosted on this VPS.** It still answers with a valid
-certificate and an enforced dev-phase gate, so it stays in `scripts/sites.txt`
-and is monitored — it simply serves from somewhere else now. The leftover
-`digitaltoberoende` container is being removed; the weekly update no longer
-recreates it, and `scripts/redeploy-digitaltoberoende.sh` is kept only as a
-record of the mounts the site needs if it ever moves back here.
+**euproof.eu is hosted here, on the `digitaltoberoende` container.** It is
+started by `scripts/redeploy-digitaltoberoende.sh` with `docker run` rather
+than by compose, because it needs the `nginx.conf` mount that carries the
+dev-phase gate. The weekly update runs that script unconditionally, which also
+restores the site if the container has gone missing.
+
+This was briefly misread as "the site has moved off this VPS", because the
+container is absent from every metrics snapshot up to 2026-08-30 — it has no
+healthcheck, and the collector was silently dropping exactly those (see below).
+Removing it on that basis took euproof.eu down with a 502. **If euproof.eu
+502s, the container is gone:** re-run the redeploy script, or the deploy
+workflow in
+[Tschiffer46/digitaltoberoende](https://github.com/Tschiffer46/digitaltoberoende).
+
+```bash
+ssh deploy@89.167.90.112
+curl -fsSL https://raw.githubusercontent.com/Tschiffer46/server-maintenance/main/scripts/redeploy-digitaltoberoende.sh \
+  -o /tmp/redeploy-digitaltoberoende.sh
+bash /tmp/redeploy-digitaltoberoende.sh
+```
 
 ### Server-side cleanup still pending
 
-The weekly run reports these. Again: **on the VPS**, not on Freja7.
+On the VPS, not on Freja7:
 
 ```bash
 ssh deploy@89.167.90.112
 
-# Two leftover containers that should not be running. Handled one at a time so
-# that a container which is already gone does not stop the other from being
-# removed, and so the output says which of the two actually existed.
-for c in moss digitaltoberoende; do
-  docker rm -f "$c" 2>/dev/null && echo "removed $c" || echo "$c not present"
-done
-
-# digitaltoberoende is still a service in docker-compose.yml, so the
-# post-update check reports it missing until the definition is removed
-nano ~/hosting/docker-compose.yml    # drop the digitaltoberoende service
+# Registry credentials for ghcr.io. A fine-grained PAT does NOT work here —
+# ghcr.io requires a CLASSIC personal access token with read:packages.
+docker login ghcr.io -u Tschiffer46
 ```
+
+`digitaltoberoende` must stay in `docker-compose.yml` and stay running: it
+serves euproof.eu. `moss` was genuinely a leftover and has been removed.
+
 
 ### Why two containers were invisible to the dashboard
 
