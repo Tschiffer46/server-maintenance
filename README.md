@@ -160,11 +160,25 @@ the backup list and the database-size collector. Its container disappeared from
 the server on 17 August; the last restorable dump was 24 July and 14-day
 rotation has since deleted it.
 
-**euproof.eu / digitaltoberoende:** the `digitaltoberoende` container is no
-longer on this VPS, yet euproof.eu still answers with a valid certificate — so
-it is served from somewhere else now. `update-server.sh` skips its redeploy when
-the container is absent instead of failing the whole weekly run. Worth
-confirming where it is actually hosted.
+**euproof.eu is no longer hosted on this VPS.** It still answers with a valid
+certificate and an enforced dev-phase gate, so it stays in `scripts/sites.txt`
+and is monitored — it simply serves from somewhere else now. The leftover
+`digitaltoberoende` container is being removed; the weekly update no longer
+recreates it, and `scripts/redeploy-digitaltoberoende.sh` is kept only as a
+record of the mounts the site needs if it ever moves back here.
+
+### Server-side cleanup still pending
+
+The weekly run reports these; they need one SSH session:
+
+```bash
+# Two leftover containers that should not be running
+docker stop moss digitaltoberoende && docker rm moss digitaltoberoende
+
+# digitaltoberoende is still a service in docker-compose.yml, so the
+# post-update check will report it missing until the definition is removed
+$EDITOR ~/hosting/docker-compose.yml    # drop the digitaltoberoende service
+```
 
 ## Energi Dashboard
 

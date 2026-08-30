@@ -64,23 +64,16 @@ for svc in azprofil azp2b agiletransition hemsidor ehandel azstore schiffer seat
     || { log "ERROR: Failed to restart $svc"; ERRORS=$((ERRORS+1)); }
 done
 
-# digitaltoberoende (euproof.eu) must NOT be recreated from a bare compose definition:
-# it requires its nginx.conf mount or the dev-phase gate silently disappears. Always
-# use the dedicated script. The container was removed from this VPS in August 2026 —
-# euproof.eu is still answering, so it is served from somewhere else now. Skip the
-# redeploy unless the container is actually here, rather than failing the whole run.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if docker ps -a --format '{{.Names}}' | grep -qx digitaltoberoende; then
-  if [ -x "$SCRIPT_DIR/redeploy-digitaltoberoende.sh" ]; then
-    "$SCRIPT_DIR/redeploy-digitaltoberoende.sh" >> "$LOG" 2>&1 \
-      || { log "ERROR: Failed to restart digitaltoberoende"; ERRORS=$((ERRORS+1)); }
-  else
-    log "ERROR: $SCRIPT_DIR/redeploy-digitaltoberoende.sh missing — the workflow must upload it alongside this script"
-    ERRORS=$((ERRORS+1))
-  fi
-else
-  log "SKIP: digitaltoberoende is not on this host (euproof.eu is served elsewhere)"
-fi
+# digitaltoberoende (euproof.eu) is NOT hosted on this VPS any more, and its
+# leftover container is being removed. This step used to call
+# redeploy-digitaltoberoende.sh whenever a container by that name existed,
+# which meant the weekly run kept recreating a container that should not be
+# here at all. euproof.eu is still probed from scripts/sites.txt — it just
+# answers from somewhere else now.
+#
+# scripts/redeploy-digitaltoberoende.sh is kept for reference (it records the
+# exact mounts the site needs) but is no longer run automatically. If euproof
+# ever moves back onto this VPS, run it by hand and restore this step.
 
 # 4. Pull and restart GHCR app images, one service at a time so a single stale
 #    or decommissioned app cannot block updates for the others.
@@ -123,12 +116,11 @@ sleep 10
 #    Expectations come from docker-compose.yml itself rather than a hand-kept
 #    list, so decommissioning a service updates this check automatically.
 #
-#    A compose service may legitimately run OUTSIDE compose: digitaltoberoende
-#    is defined in docker-compose.yml but is started by
-#    redeploy-digitaltoberoende.sh with `docker run`, because it needs the
-#    nginx.conf mount that a bare compose definition would drop. Compose does
-#    not consider such a service "running", so check the container name too —
-#    otherwise a healthy site is reported as down every week.
+#    A compose service can legitimately be started outside compose, with
+#    `docker run`, when it needs mounts the compose definition does not carry.
+#    Compose does not report such a service as running, so fall back to looking
+#    for a running container of the same name — otherwise a healthy site gets
+#    reported as down every week.
 log "=== Post-update health check ==="
 RUNNING_SERVICES=$(docker compose ps --services --filter "status=running" 2>/dev/null | sort)
 RUNNING_CONTAINERS=$(docker ps --format '{{.Names}}' | sort)
