@@ -1,0 +1,48 @@
+name: Restore euproof.eu
+
+# euproof.eu is served by the `digitaltoberoende` container, which is started
+# with `docker run` rather than by compose because it needs the nginx.conf
+# mount that carries the dev-phase gate. If that container goes missing the
+# site 502s, and until now the only way back was a manual SSH session.
+#
+# This job runs exactly one thing: scripts/redeploy-digitaltoberoende.sh.
+# No OS updates, no other containers touched.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Redeploy digitaltoberoende
+        run: |
+          set -eo pipefail
+          scp -i ~/.ssh/key scripts/redeploy-digitaltoberoende.sh \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/redeploy-digitaltoberoende.sh
+          ssh -i ~/.ssh/key \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            'chmod +x /tmp/redeploy-digitaltoberoende.sh && bash /tmp/redeploy-digitaltoberoende.sh'
+
+      - name: Verify the site is back
+        run: |
+          for i in 1 2 3 4 5; do
+            sleep 5
+            status=$(curl -o /dev/null -s -w "%{http_code}" --max-time 15 \
+              -A "Mozilla/5.0 HealthCheck" \
+              -H "Cookie: euproof_preview=0432885f1a" https://euproof.eu/en/ || echo 000)
+            echo "attempt $i: euproof.eu returned $status"
+            if [ "$status" = "200" ]; then echo "euproof.eu is back."; exit 0; fi
+          done
+          echo "euproof.eu is still not serving 200 — check the redeploy output above."
+          exit 1
