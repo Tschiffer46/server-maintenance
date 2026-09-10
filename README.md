@@ -10,6 +10,7 @@ Automated maintenance for the Hetzner VPS (89.167.90.112) hosting all agiletrans
 | **Health Check** | Manual only | HTTP checks every site in `scripts/sites.txt` + server disk/memory/containers |
 | **Weekly Update** | Sunday 03:00 CET | OS updates, Docker image pulls, container restarts |
 | **Collect Dashboard Metrics** | Every 6 hours | Snapshots usage/risk/status JSON into `docs/data/`, then alerts on critical risks |
+| **Restore euproof.eu** | Manual only | Recreates the `digitaltoberoende` container behind euproof.eu, then verifies the site answers and is still gated |
 
 All workflows can also be triggered manually from GitHub Actions.
 
@@ -30,6 +31,12 @@ helps if a workflow fails when something is wrong, so:
   that is permanently red is a workflow nobody reads.
 - **Health Check** stays manual — it is the on-demand deep check, and the
   metrics gate already covers the same ground on a schedule.
+
+A critical that nobody fixes therefore mails you **four times a day**, because
+the condition is still true four times a day. That is the design working, not a
+bug in it: the way to stop the mail is to fix or retire the thing it names.
+Silencing a rule instead puts the repo back in the state described below, where
+everything was green and voxtera served 502 for twelve days.
 
 > Collecting metrics never used to fail, which is how voxtera served 502 for
 > twelve days and the nightly backup wrote empty files for five weeks while
@@ -99,6 +106,11 @@ Two things the weekly update needs that live on the server, not in this repo.
 Both fail loudly in the run log with the exact command to fix them, but they
 need a one-time SSH session.
 
+Neither has been done: **every weekly run since 2 August (runs 20–25) failed on
+these two errors and nothing else** — one failure email every Sunday. The OS
+upgrade step has not run in that time, and the three app images have stayed on
+whatever tag they were pulled at last.
+
 > Run these on the **Hetzner VPS**, not on Freja7. This repo touches two
 > machines and only one of them hosts the sites:
 >
@@ -167,36 +179,59 @@ the backup list and the database-size collector. Its container disappeared from
 the server on 17 August; the last restorable dump was 24 July and 14-day
 rotation has since deleted it.
 
-**euproof.eu is no longer hosted on this VPS.** It still answers with a valid
-certificate and an enforced dev-phase gate, so it stays in `scripts/sites.txt`
-and is monitored — it simply serves from somewhere else now. The leftover
-`digitaltoberoende` container is being removed; the weekly update no longer
-recreates it, and `scripts/redeploy-digitaltoberoende.sh` is kept only as a
-record of the mounts the site needs if it ever moves back here.
+**euproof.eu is down (502), and this VPS is what serves it.** The earlier claim
+that the site had moved off this server was wrong. `euproof.eu` resolves to
+89.167.90.112, NPM here terminates its TLS, and the `digitaltoberoende`
+container was the upstream behind that proxy host. Removing that container on
+30 August as "leftover cleanup" is what took the site down: NPM kept answering
+on a valid certificate — which is why the site looked alive — and returned 502
+for everything behind it. Every metrics run since `2026-08-30T18:26Z` has
+reported it.
 
-### Server-side cleanup still pending
+**The site is to be restored here.** Run the **Restore euproof.eu** workflow
+(Actions → Restore euproof.eu → Run workflow). It uploads and runs
+`scripts/redeploy-digitaltoberoende.sh` on the VPS over the same SSH secrets
+every other workflow uses, then probes the site and fails if it is not actually
+back — or is back but answering 200 without the preview cookie.
 
-The weekly run reports these. Again: **on the VPS**, not on Freja7.
+It needs `dist/`, `nginx.conf` and `.htpasswd` under
+`~/hosting/sites/client-digitaltoberoende` on the VPS; the deploy workflow in
+[Tschiffer46/digitaltoberoende](https://github.com/Tschiffer46/digitaltoberoende)
+is what puts them there. If they are gone the redeploy script stops with the
+missing path rather than starting a container that would serve the site
+unprotected — run that deploy first, then this workflow again.
+
+By hand, if you would rather:
+
+```bash
+scp scripts/redeploy-digitaltoberoende.sh deploy@89.167.90.112:/tmp/
+ssh deploy@89.167.90.112 'bash /tmp/redeploy-digitaltoberoende.sh'
+```
+
+Retiring the domain instead would mean pointing DNS away, deleting the NPM
+proxy host, and only then dropping the URL from `scripts/sites.txt` — dropping
+it from the site list alone silences the alert while euproof.eu still answers
+502 from this server.
+
+### Server-side cleanup — done, and what it cost
+
+Both leftover containers are gone: weekly run 24 (30 August) still reported
+`moss` and `digitaltoberoende` as running but unmanaged, run 25 (6 September)
+reports neither. Removing `moss` was right. Removing `digitaltoberoende` is
+what took euproof.eu down — see the hosted-sites table above.
+
+**Open: the metrics collector does not list every container.** Run 24 saw both
+containers running via `docker ps` on 30 August, while all three metrics
+snapshots from that same day list 17 containers and neither of them — in fact
+neither has ever appeared in a snapshot. `scripts/collect-metrics.sh`
+enumerates with `docker ps -a`, so the two should agree and do not. Until that
+is explained, "container stopped or unhealthy" — a critical in
+`scripts/check-risks.sh` — can only be trusted for containers the collector
+already lists, and a container that vanishes the way this one did raises
+nothing. Compare the two lists on the VPS:
 
 ```bash
 ssh deploy@89.167.90.112
-
-# Two leftover containers that should not be running. Handled one at a time so
-# that a container which is already gone does not stop the other from being
-# removed, and so the output says which of the two actually existed.
-for c in moss digitaltoberoende; do
-  docker rm -f "$c" 2>/dev/null && echo "removed $c" || echo "$c not present"
-done
-
-# digitaltoberoende is still a service in docker-compose.yml, so the
-# post-update check reports it missing until the definition is removed
-nano ~/hosting/docker-compose.yml    # drop the digitaltoberoende service
-```
-
-While you are on the VPS, this settles the open question about why the metrics
-collector never lists `moss` or `digitaltoberoende`:
-
-```bash
 docker ps -a --format '{{.Names}}'
 ```
 

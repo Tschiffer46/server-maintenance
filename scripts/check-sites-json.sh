@@ -45,6 +45,11 @@ cert_days_left() {
   fi
 }
 
+probe() {
+  curl -o /dev/null -s -w "%{http_code} %{time_total}\n" --max-time 15 \
+    -A "Mozilla/5.0 HealthCheck" "$@" 2>/dev/null || echo "000 0"
+}
+
 results=()
 for url in "${SITES[@]}"; do
   host=${url#https://}
@@ -54,15 +59,34 @@ for url in "${SITES[@]}"; do
   auth_enforced="null"
   if [ "$host" = "euproof.eu" ]; then
     auth_args=(-H "Cookie: $EUPROOF_COOKIE")
-    noauth_status=$(curl -o /dev/null -s -w "%{http_code}" --max-time 15 \
-      -A "Mozilla/5.0 HealthCheck" "$url" 2>/dev/null || echo "000")
-    if [ "$noauth_status" = "401" ] || [ "$noauth_status" = "403" ]; then auth_enforced="true"; else auth_enforced="false"; fi
   fi
 
-  read -r status time_total < <(
-    curl -o /dev/null -s -w "%{http_code} %{time_total}\n" --max-time 15 \
-      -A "Mozilla/5.0 HealthCheck" "${auth_args[@]}" "$url" 2>/dev/null || echo "000 0"
-  )
+  # A single connection-level blip should not mail anyone. Several runs have
+  # reported status 000 (curl could not connect at all) for sites that were up
+  # in the run before and the run after; each one failed the metrics workflow
+  # and sent an alert about a site that was never down. Retry once before
+  # believing it. A site that is genuinely down fails both probes.
+  read -r status time_total < <(probe "${auth_args[@]}" "$url")
+  if [ "${status:-000}" = "000" ]; then
+    sleep 3
+    read -r status time_total < <(probe "${auth_args[@]}" "$url")
+  fi
+
+  # The dev-phase gate is only meaningful once the site itself answers. While
+  # euproof.eu returned 502 the no-cookie probe returned 502 too, and treating
+  # "not 401/403" as "gate is gone" reported the outage a second time as a
+  # security regression. Only a 200 without the cookie proves the gate is gone;
+  # anything else is inconclusive — the same three-state logic health-check.sh
+  # already uses.
+  if [ "$host" = "euproof.eu" ] && [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
+    read -r noauth_status _ < <(probe "$url")
+    case "$noauth_status" in
+      401|403) auth_enforced="true"  ;;
+      200)     auth_enforced="false" ;;
+      *)       auth_enforced="null"  ;;
+    esac
+  fi
+
   ok="false"
   if [ "$status" -ge 200 ] && [ "$status" -lt 500 ]; then ok="true"; fi
   # The dev-phase password protection counts as part of site health.
