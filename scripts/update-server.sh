@@ -18,15 +18,28 @@ log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG"; }
 # the password" — two cryptic errors per run and no OS updates, which is what
 # had been happening unnoticed. Check once and say exactly how to fix it.
 log "=== OS Updates ==="
-if sudo -n true 2>/dev/null; then
-  sudo -n apt-get update >> "$LOG" 2>&1 || { log "ERROR: apt-get update failed"; ERRORS=$((ERRORS+1)); }
-  sudo -n DEBIAN_FRONTEND=noninteractive apt-get -y upgrade >> "$LOG" 2>&1 || { log "ERROR: apt upgrade failed"; ERRORS=$((ERRORS+1)); }
-  sudo -n DEBIAN_FRONTEND=noninteractive apt-get -y autoremove >> "$LOG" 2>&1 || true
+# The gate has to test exactly what the upgrade steps below run, or it rejects
+# the very sudoers rule this script tells you to add. It used to test
+# `sudo -n true`, which can only pass with blanket NOPASSWD — so a server set up
+# per the instructions ("NOPASSWD: /usr/bin/apt-get") still reported "no
+# passwordless sudo" and skipped every OS update, week after week, with the log
+# telling the reader to add a rule that was already there.
+#
+# Passing DEBIAN_FRONTEND through sudo needs SETENV: on that rule; without it
+# sudo refuses the command rather than the environment. Testing the full form
+# means a rule that is present but too narrow fails here, with the fix, instead
+# of two steps later as "apt upgrade failed".
+SUDO_APT=(sudo -n DEBIAN_FRONTEND=noninteractive apt-get)
+if "${SUDO_APT[@]}" --version >/dev/null 2>&1; then
+  "${SUDO_APT[@]}" update >> "$LOG" 2>&1 || { log "ERROR: apt-get update failed"; ERRORS=$((ERRORS+1)); }
+  "${SUDO_APT[@]}" -y upgrade >> "$LOG" 2>&1 || { log "ERROR: apt upgrade failed"; ERRORS=$((ERRORS+1)); }
+  "${SUDO_APT[@]}" -y autoremove >> "$LOG" 2>&1 || true
 else
   log "ERROR: no passwordless sudo for $(whoami) — OS updates skipped"
   log "       Fix once on the server, as a user with sudo:"
-  log "         echo '$(whoami) ALL=(ALL) NOPASSWD: /usr/bin/apt-get' | sudo tee /etc/sudoers.d/90-apt-maintenance"
+  log "         echo '$(whoami) ALL=(ALL) NOPASSWD:SETENV: /usr/bin/apt-get' | sudo tee /etc/sudoers.d/90-apt-maintenance"
   log "         sudo chmod 0440 /etc/sudoers.d/90-apt-maintenance && sudo visudo -c"
+  log "       SETENV: is what lets this run pass DEBIAN_FRONTEND through; a plain NOPASSWD rule is refused here."
   log "       Until then unattended-upgrades still applies security patches; this weekly full upgrade does not run."
   ERRORS=$((ERRORS+1))
 fi
