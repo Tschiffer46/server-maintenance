@@ -106,10 +106,9 @@ Two things the weekly update needs that live on the server, not in this repo.
 Both fail loudly in the run log with the exact command to fix them, but they
 need a one-time SSH session.
 
-Neither has been done: **every weekly run since 2 August (runs 20–25) failed on
-these two errors and nothing else** — one failure email every Sunday. The OS
-upgrade step has not run in that time, and the three app images have stayed on
-whatever tag they were pulled at last.
+Both were done on 10 September, and run 26 pulled all three app images
+successfully for the first time since 2 August. The OS upgrade step still needs
+the `SETENV:` rule above — see the note under it.
 
 > Run these on the **Hetzner VPS**, not on Freja7. This repo touches two
 > machines and only one of them hosts the sites:
@@ -125,9 +124,14 @@ unattended-upgrades still handles security patches, but the weekly full upgrade
 silently does nothing:
 
 ```bash
-echo 'deploy ALL=(ALL) NOPASSWD: /usr/bin/apt-get' | sudo tee /etc/sudoers.d/90-apt-maintenance
+echo 'deploy ALL=(ALL) NOPASSWD:SETENV: /usr/bin/apt-get' | sudo tee /etc/sudoers.d/90-apt-maintenance
 sudo chmod 0440 /etc/sudoers.d/90-apt-maintenance && sudo visudo -c
 ```
+
+`SETENV:` matters. The run passes `DEBIAN_FRONTEND=noninteractive` through
+`sudo`, and a plain `NOPASSWD:` rule makes sudo refuse the command outright
+rather than just dropping the variable. A rule written without it looks correct,
+parses fine under `visudo -c`, and still leaves OS updates skipped.
 
 **Registry credentials for ghcr.io.** Pulling the app images (`stegvis`,
 `forfor`, `vadskavi`) needs a login, or the pull fails with `denied` and the
