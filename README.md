@@ -10,6 +10,7 @@ Automated maintenance for the Hetzner VPS (89.167.90.112) hosting all agiletrans
 | **Health Check** | Manual only | HTTP checks every site in `scripts/sites.txt` + server disk/memory/containers |
 | **Weekly Update** | Sunday 03:00 CET | OS updates, Docker image pulls, container restarts |
 | **Collect Dashboard Metrics** | Every 6 hours | Snapshots usage/risk/status JSON into `docs/data/`, then alerts on critical risks |
+| **Restore euproof.eu** | Manual only | Recreates the `digitaltoberoende` container behind euproof.eu, then verifies the site answers and is still gated |
 
 All workflows can also be triggered manually from GitHub Actions.
 
@@ -187,26 +188,30 @@ on a valid certificate — which is why the site looked alive — and returned 5
 for everything behind it. Every metrics run since `2026-08-30T18:26Z` has
 reported it.
 
-It needs a decision, because the alert is correct and will keep firing every
-six hours until one of these happens:
+**The site is to be restored here.** Run the **Restore euproof.eu** workflow
+(Actions → Restore euproof.eu → Run workflow). It uploads and runs
+`scripts/redeploy-digitaltoberoende.sh` on the VPS over the same SSH secrets
+every other workflow uses, then probes the site and fails if it is not actually
+back — or is back but answering 200 without the preview cookie.
 
-- **Restore it here.** `dist/`, `nginx.conf` and `.htpasswd` must exist under
-  `~/hosting/sites/client-digitaltoberoende` on the VPS (the deploy workflow in
-  [Tschiffer46/digitaltoberoende](https://github.com/Tschiffer46/digitaltoberoende)
-  puts them there), then upload and run the redeploy script:
+It needs `dist/`, `nginx.conf` and `.htpasswd` under
+`~/hosting/sites/client-digitaltoberoende` on the VPS; the deploy workflow in
+[Tschiffer46/digitaltoberoende](https://github.com/Tschiffer46/digitaltoberoende)
+is what puts them there. If they are gone the redeploy script stops with the
+missing path rather than starting a container that would serve the site
+unprotected — run that deploy first, then this workflow again.
 
-  ```bash
-  scp scripts/redeploy-digitaltoberoende.sh deploy@89.167.90.112:/tmp/
-  ssh deploy@89.167.90.112 'bash /tmp/redeploy-digitaltoberoende.sh'
-  ```
+By hand, if you would rather:
 
-  It refuses to start a container that would serve the site without its
-  dev-phase gate, so a missing `.htpasswd` stops it rather than publishing the
-  site unprotected.
+```bash
+scp scripts/redeploy-digitaltoberoende.sh deploy@89.167.90.112:/tmp/
+ssh deploy@89.167.90.112 'bash /tmp/redeploy-digitaltoberoende.sh'
+```
 
-- **Retire it.** Point the DNS record away, delete the NPM proxy host, and drop
-  the URL from `scripts/sites.txt`. Removing it from the site list alone would
-  only silence the alert while the domain still answers 502 from here.
+Retiring the domain instead would mean pointing DNS away, deleting the NPM
+proxy host, and only then dropping the URL from `scripts/sites.txt` — dropping
+it from the site list alone silences the alert while euproof.eu still answers
+502 from this server.
 
 ### Server-side cleanup — done, and what it cost
 

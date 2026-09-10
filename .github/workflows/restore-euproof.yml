@@ -1,0 +1,96 @@
+name: Restore euproof.eu
+
+# Manual only.
+#
+# euproof.eu is served from this VPS: the domain resolves here, NPM terminates
+# its TLS, and the `digitaltoberoende` container is the upstream behind that
+# proxy host. When the container is missing, NPM answers 502 on a still-valid
+# certificate — which is what happened on 30 August 2026 when the container was
+# removed as leftover cleanup.
+#
+# This recreates it with scripts/redeploy-digitaltoberoende.sh, which carries
+# the exact mounts the site needs and refuses to start a container that would
+# serve the site without its dev-phase gate. It then probes the site through
+# the shared site list and fails if the site is not actually back, or is back
+# but unprotected.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restore-euproof
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq openssl
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Recreate the digitaltoberoende container
+        run: |
+          set -eo pipefail   # without this a failing SSH run hides behind the last command
+          scp -i ~/.ssh/key scripts/redeploy-digitaltoberoende.sh \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/redeploy-digitaltoberoende.sh
+          ssh -i ~/.ssh/key \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            'chmod +x /tmp/redeploy-digitaltoberoende.sh && bash /tmp/redeploy-digitaltoberoende.sh'
+
+      - name: Verify the site is back and still gated
+        run: |
+          set -eo pipefail
+          sleep 5   # let nginx start accepting connections before believing a probe
+
+          chmod +x scripts/check-sites-json.sh
+          bash scripts/check-sites-json.sh > /tmp/sites.json
+          entry=$(jq -c '.sites[] | select(.host == "euproof.eu")' /tmp/sites.json)
+          echo "$entry"
+
+          status=$(jq -r '.status'         <<<"$entry")
+          ok=$(jq -r    '.ok'              <<<"$entry")
+          gate=$(jq -r  '.auth_enforced'   <<<"$entry")
+          cert=$(jq -r  '.cert_days_left'  <<<"$entry")
+
+          {
+            echo "## euproof.eu after redeploy"
+            echo ""
+            echo "- HTTP status (with preview cookie): \`$status\`"
+            echo "- healthy: \`$ok\`"
+            echo "- dev-phase gate enforced: \`$gate\`"
+            echo "- certificate days left: \`$cert\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # An unprotected site is checked first: it also reports ok=false, and
+          # "not healthy" would be the wrong thing to read about a site that is
+          # answering 200 to the whole internet.
+          if [ "$gate" = "false" ]; then
+            echo "FAIL: euproof.eu answers ($status) but serves 200 without the preview cookie."
+            echo "      The site must not be publicly readable during the dev phase — check the .htpasswd"
+            echo "      and nginx.conf mounts in scripts/redeploy-digitaltoberoende.sh."
+            exit 1
+          fi
+          if [ "$ok" != "true" ]; then
+            echo "FAIL: euproof.eu is still not healthy (status $status)."
+            echo "      A 502 here means the container did not come up, or NPM points at a different upstream."
+            exit 1
+          fi
+          if [ "$gate" != "true" ]; then
+            echo "FAIL: euproof.eu answers $status, but the gate check was inconclusive (auth_enforced=$gate)."
+            echo "      Re-run, or check the no-cookie response by hand before trusting the site is protected."
+            exit 1
+          fi
+          echo "euproof.eu is back at status $status with the dev-phase gate enforced."
