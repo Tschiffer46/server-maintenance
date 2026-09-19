@@ -239,6 +239,84 @@ ssh deploy@89.167.90.112
 docker ps -a --format '{{.Names}}'
 ```
 
+## Umami — besöksstatistik (not deployed yet)
+
+`padeltobusiness.se` is wired for analytics but ships with it switched off; the
+site-side half is done and waiting on a provider. The self-hosted option is
+Umami on this VPS, which keeps visitor data on the same server as the sites and
+needs no cookie-consent banner because it sets no cookies.
+
+Nothing below has been run yet. Two of the steps deliberately come **last**,
+because doing them early makes this repo's own alerting go red:
+`scripts/sites.txt` would probe a host that does not answer, and
+`scripts/backup-databases.sh` would fail on a container that does not exist.
+
+1. **Database and container.** Add to `~/hosting/docker-compose.yml`, alongside
+   the other `*-db` pairs:
+
+   ```yaml
+     umami-db:
+       image: postgres:16-alpine
+       container_name: umami-db
+       restart: unless-stopped
+       environment:
+         POSTGRES_USER: umami
+         POSTGRES_PASSWORD: <generate one>
+         POSTGRES_DB: umami
+       volumes:
+         - ./data/umami-db:/var/lib/postgresql/data
+
+     umami:
+       image: ghcr.io/umami-software/umami:postgresql-latest
+       container_name: umami
+       restart: unless-stopped
+       depends_on: [umami-db]
+       environment:
+         DATABASE_URL: postgresql://umami:<same password>@umami-db:5432/umami
+         APP_SECRET: <generate one>
+   ```
+
+   No `ports:` mapping — NPM reaches it over the compose network, and not
+   publishing the port keeps it off the public internet even while UFW is off.
+
+   ```bash
+   ssh deploy@89.167.90.112
+   docker compose -f ~/hosting/docker-compose.yml up -d umami-db umami
+   ```
+
+2. **DNS.** Point `stats.agiletransition.se` at 89.167.90.112.
+
+3. **Proxy host.** In NPM (through the SSH tunnel — see *After Hardening*),
+   add `stats.agiletransition.se` → `umami:3000`, request a Let's Encrypt
+   certificate, and force HTTPS.
+
+4. **First login.** Open the site and sign in as `admin` / `umami`, then
+   **change that password immediately** — it is the documented default and the
+   host is now public. Add `padeltobusiness.se` as a website and copy its UUID.
+
+5. **Turn it on for the site.** In the
+   [azP2B repo](https://github.com/Tschiffer46/azp2b), Settings → Secrets and
+   variables → Actions → *Variables*, set `VITE_ANALYTICS_SRC` to
+   `https://stats.agiletransition.se/script.js` and `VITE_ANALYTICS_WEBSITE_ID`
+   to that UUID, then re-run its deploy workflow. The values are build-time, so
+   the existing `dist/` will not pick them up on its own.
+
+6. **Only once it is actually up**, bring it under this repo's monitoring:
+   add `https://stats.agiletransition.se` to `scripts/sites.txt` and
+   `"umami:umami-db:umami:umami"` to `DATABASES` in
+   `scripts/backup-databases.sh`. Done in the other order, both start failing
+   before there is anything to monitor — and a workflow that is red for a
+   known reason is the exact failure mode the alerting section above describes.
+
+### The managed alternative
+
+Plausible Cloud costs roughly €9/month for this traffic volume, is also
+cookieless, and needs none of the steps above — only step 5, with
+`VITE_ANALYTICS_SRC=https://plausible.io/js/script.js` and
+`VITE_ANALYTICS_DOMAIN=padeltobusiness.se`. It buys back the container, the
+database, the backup entry and the upgrade treadmill, at the cost of the
+visitor data living with a third party (EU-hosted).
+
 ## Energi Dashboard
 
 Unlike every other row above, energi does **not** run on this VPS at all —
