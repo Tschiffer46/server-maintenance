@@ -239,6 +239,146 @@ ssh deploy@89.167.90.112
 docker ps -a --format '{{.Names}}'
 ```
 
+## PocketBase — data for padeltobusiness.se (not deployed yet)
+
+Events and registrations for padeltobusiness.se move off the shared Google
+Sheet and into PocketBase on this VPS. PocketBase is one binary that is the
+database (SQLite), the login system and an admin UI at once, so there is no
+separate API container and no Postgres pair to run.
+
+Why it suits this repo: the whole database is a single file under
+`~/hosting/pocketbase/pb_data`, so it backs up the way `energi-*.db.gz`
+already does — a file copy, not a `pg_dump`.
+
+`scripts/setup-pocketbase.sh` does the container half. It refuses to run
+without `PB_VERSION`: PocketBase spent a long time before 1.0 and changed its
+API between minor releases, so the version is pinned deliberately rather than
+tracked. It creates `~/hosting/pocketbase` and builds the image, and it does
+**not** edit `docker-compose.yml` — it prints the service to paste instead,
+because a script that rewrites the file every site depends on is a bad trade
+for the seconds it saves.
+
+1. **Build the image.** Look up the current version at
+   <https://github.com/pocketbase/pocketbase/releases>, then:
+
+   ```bash
+   scp scripts/setup-pocketbase.sh deploy@89.167.90.112:/tmp/
+   ssh deploy@89.167.90.112 'PB_VERSION=0.00.0 bash /tmp/setup-pocketbase.sh'
+   ```
+
+2. **Add the service** it prints to `~/hosting/docker-compose.yml` and start it
+   with `docker compose -f ~/hosting/docker-compose.yml up -d pocketbase`.
+
+3. **DNS.** Point `data.padeltobusiness.se` at 89.167.90.112.
+
+4. **Proxy host.** In NPM (through the SSH tunnel — see *After Hardening*), add
+   `data.padeltobusiness.se` → host `pocketbase`, port `8090`, request a
+   Let's Encrypt certificate, force HTTPS, and enable **Websockets Support**
+   (PocketBase's admin UI uses them for live updates).
+
+   If NPM cannot resolve the name `pocketbase`, it is running from a different
+   compose project and therefore a different network. Attach it to the same
+   network rather than publishing port 8090 to the host.
+
+5. **First account.** Open `https://data.padeltobusiness.se/_/` and create the
+   superuser. Unlike Umami there is no documented default password — the first
+   visitor sets it, so do this immediately after the proxy host answers, not
+   the next day.
+
+6. **Only once it is actually up**, bring it under this repo's monitoring: add
+   `https://data.padeltobusiness.se/api/health` to `scripts/sites.txt`, and a
+   `pb_data` copy to `scripts/backup-databases.sh` alongside the SQLite path
+   that `energi` already uses. Done in the other order, both fail on something
+   that was never deployed.
+
+### Backing it up
+
+PocketBase keeps everything — records, users, uploaded files — under
+`pb_data`. The safe copy is `pocketbase.exe backup` via its own API, or
+stopping the container briefly and taring the directory; copying the SQLite
+file from a running container can catch a write in progress. Whichever is
+chosen, it belongs in `scripts/backup-databases.sh` so it lands in the same
+14-day rotation as the rest, and so `check-risks.sh` notices when it goes
+stale.
+
+## Umami — besöksstatistik (not deployed yet)
+
+`padeltobusiness.se` is wired for analytics but ships with it switched off; the
+site-side half is done and waiting on a provider. The self-hosted option is
+Umami on this VPS, which keeps visitor data on the same server as the sites and
+needs no cookie-consent banner because it sets no cookies.
+
+Nothing below has been run yet. Two of the steps deliberately come **last**,
+because doing them early makes this repo's own alerting go red:
+`scripts/sites.txt` would probe a host that does not answer, and
+`scripts/backup-databases.sh` would fail on a container that does not exist.
+
+1. **Database and container.** Add to `~/hosting/docker-compose.yml`, alongside
+   the other `*-db` pairs:
+
+   ```yaml
+     umami-db:
+       image: postgres:16-alpine
+       container_name: umami-db
+       restart: unless-stopped
+       environment:
+         POSTGRES_USER: umami
+         POSTGRES_PASSWORD: <generate one>
+         POSTGRES_DB: umami
+       volumes:
+         - ./data/umami-db:/var/lib/postgresql/data
+
+     umami:
+       image: ghcr.io/umami-software/umami:postgresql-latest
+       container_name: umami
+       restart: unless-stopped
+       depends_on: [umami-db]
+       environment:
+         DATABASE_URL: postgresql://umami:<same password>@umami-db:5432/umami
+         APP_SECRET: <generate one>
+   ```
+
+   No `ports:` mapping — NPM reaches it over the compose network, and not
+   publishing the port keeps it off the public internet even while UFW is off.
+
+   ```bash
+   ssh deploy@89.167.90.112
+   docker compose -f ~/hosting/docker-compose.yml up -d umami-db umami
+   ```
+
+2. **DNS.** Point `stats.agiletransition.se` at 89.167.90.112.
+
+3. **Proxy host.** In NPM (through the SSH tunnel — see *After Hardening*),
+   add `stats.agiletransition.se` → `umami:3000`, request a Let's Encrypt
+   certificate, and force HTTPS.
+
+4. **First login.** Open the site and sign in as `admin` / `umami`, then
+   **change that password immediately** — it is the documented default and the
+   host is now public. Add `padeltobusiness.se` as a website and copy its UUID.
+
+5. **Turn it on for the site.** In the
+   [azP2B repo](https://github.com/Tschiffer46/azp2b), Settings → Secrets and
+   variables → Actions → *Variables*, set `VITE_ANALYTICS_SRC` to
+   `https://stats.agiletransition.se/script.js` and `VITE_ANALYTICS_WEBSITE_ID`
+   to that UUID, then re-run its deploy workflow. The values are build-time, so
+   the existing `dist/` will not pick them up on its own.
+
+6. **Only once it is actually up**, bring it under this repo's monitoring:
+   add `https://stats.agiletransition.se` to `scripts/sites.txt` and
+   `"umami:umami-db:umami:umami"` to `DATABASES` in
+   `scripts/backup-databases.sh`. Done in the other order, both start failing
+   before there is anything to monitor — and a workflow that is red for a
+   known reason is the exact failure mode the alerting section above describes.
+
+### The managed alternative
+
+Plausible Cloud costs roughly €9/month for this traffic volume, is also
+cookieless, and needs none of the steps above — only step 5, with
+`VITE_ANALYTICS_SRC=https://plausible.io/js/script.js` and
+`VITE_ANALYTICS_DOMAIN=padeltobusiness.se`. It buys back the container, the
+database, the backup entry and the upgrade treadmill, at the cost of the
+visitor data living with a third party (EU-hosted).
+
 ## Energi Dashboard
 
 Unlike every other row above, energi does **not** run on this VPS at all —
